@@ -1,0 +1,16 @@
+language: python
+python:
+  - "2.7"
+  - "3.4"
+# command to install dependencies
+install:
+  - "pip install -r requirements.txt"
+  - "pip install pep8 --use-mirrors"
+  - "pip install ."
+before_script:
+  - "pep8 --ignore=E501,E402 packagename"
+# command to run tests
+script: nosetests
+notifications:
+  flowdock:
+    secure: "WjMQXvdrs5kjTitYXj5u4ePGm/AA0jpjm+prSLkP/R2zQoVoZxGu9dEx7+Q0VViqY6t4kYYnA3mM79o62lJgVYue2boyfHkUJpGiavwkopN8wDEvCQcLLw3x/CpqgALSj6KydhtsMxLmKvLeZLT+KjdvYQo5pc4l1Sebu/9+D/OBlPDgLR/OccWsFLy/b2LFDsiBj4inQxFvp2bMSYR8ItPeCo4/LMXebTjnLxMSMNl1METjILT7aSG795FuA3Jly3ShyMRq/Syss9UqObXOEcRn0FSGJzgaBwzi4IaTj1oVG+L+qf+iG8h0reih6O454x0J8nEONzfWh2yjOU30z3n3RqcKHOPJvk89/ti1FhnEijLG6wLVuCGkwzF0lH+bQBU+JZUe7XWB2s5LPBAMyzbn9me2bNfmgSdXZw4CdeoLawGqpo37SoRgWDUzCRMuOjdRKZj/GKzJa7ygdSLf4oNuSN5eX4YXCaGYLqGWI6vr3eJZzuj4wP5m56tmM5ueEDoyGupdRQ4g/RESqsF/25yF/wBrbMOv0cAnRCTFbvN3k7Ej2rvFiquiSX/9EIo9+tITCNgR9OSnb2jw6Osa0KYc1Bh2e+/zhDHgBRBWCtcWVFBSsCU+J0GYAy3LBZ+jeM2V/h24ycSspuBD4sm9Qa0bLW+QON8C2tsxykWge6o="
