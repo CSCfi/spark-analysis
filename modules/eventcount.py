@@ -43,7 +43,7 @@ def keymod(x):
 # Transform the final time
 def timetr(x):
 
-    dt = datetime.fromtimestamp(start_time + x[0]*interval).strftime('%Y-%m-%d %H:%M:%S')
+    dt = datetime.fromtimestamp(start_time + x[0] * interval).strftime('%Y-%m-%d %H:%M:%S')
     return (dt, x[1])
 
 
@@ -79,7 +79,7 @@ def main(argv):
     cc = rdd.count()
     print(cc)  # Check how much total data is there
 
-    rdd = rdd.filter(lambda x: start_time <= x[index]/1000 < end_time)  # Filter data according to the start and end times
+    rdd = rdd.filter(lambda x: start_time <= x[index] / 1000 < end_time)  # Filter data according to the start and end times
 
     rdd1 = rdd.map(keymod).reduceByKey(add)
     rdd1 = rdd1.map(timetr)  # Human readable time
