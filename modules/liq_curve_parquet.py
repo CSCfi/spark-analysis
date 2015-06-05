@@ -4,7 +4,7 @@ from pyspark import SparkConf, SparkContext
 from datetime import datetime, date, timedelta
 import sys
 from operator import add
-
+from pyspark.sql import *
 
 start_time = 0
 index = 0
@@ -34,10 +34,10 @@ def add_date_then_query(x):
 # Hash the keys into different time interval periods and prices
 def keymod(x):
 
-    curr_t = x[index] / 1000.0
+    curr_t = x.created / 1000.0
     curr_t = curr_t - start_time
     keyindex = int(curr_t / interval)
-    return (str(keyindex) + ' ' + str(x[6]), x[7])
+    return (str(keyindex) + ' ' + str(x.price), x.quantity)
 
 
 # Transform the final time
@@ -59,14 +59,6 @@ def keysplit(x):
     return (int(res[0]), (int(res[1]), x[1]))
 
 
-def import_hdf5(x, filepath):
-
-    filepath = '//shared_data//files//' + filepath
-    with h5py.File(filepath) as f:
-        data = f[str(x)].get('ORDERS')
-        return list(data[:])
-
-
 def flatten_lists(x):
 
     return (x[0], (sum(x[1][0], []), sum(x[1][1], [])))
@@ -76,7 +68,7 @@ def main(argv):
     conf = SparkConf()
     # conf.setMaster("spark://nandan-spark-cluster-fe:6066")
     # conf.setMaster("local")
-    conf.setAppName("Liq Cost HDF5")
+    conf.setAppName("Liq Cost Parquet")
     conf.set("spark.executor.memory", "5g")
     sc = SparkContext(conf=conf)
 
@@ -85,21 +77,32 @@ def main(argv):
 
     global start_time  # Using public var as params are not allowed(or I don't know of) to pass in the mapper function
     start_time = int(argv[2]) / 1000.0
+    s = int(argv[2])
+
     global end_time
     end_time = int(argv[3]) / 1000.0
+    e = int(argv[3])
+
     global interval
     interval = float(argv[4])
     global index
     index = tableindex[tablechoice]
     filepath = argv[5]
 
-    raw_file = sc.textFile("file:///shared_data//paths//keys.txt")
-    rdd = raw_file.flatMap(lambda x: import_hdf5(x, filepath))
+    filepath = "file:///shared_data//paths//" + filepath
+    sqlContext = SQLContext(sc)
+    rdd = sqlContext.parquetFile(filepath)
 
-    rdd = rdd.filter(lambda x: start_time <= x[index] / 1000.0 < end_time)  # Filter data according to the start and end times
+    # cc = rdd.count()
+    # print(cc)  # Check how much total data is there
 
-    rdd1 = rdd.filter(lambda x: x[5] == 66)
-    rdd2 = rdd.filter(lambda x: x[5] == 83)
+    # rdd = rdd.filter(start_time <= rdd.created / 1000.0 < end_time)  # Filter data according to the start and end times
+
+    rdd.registerTempTable("orders")
+    rdd = sqlContext.sql("SELECT created, side, price, quantity FROM orders WHERE created <" + str(e) + " AND created >=" + str(s))
+
+    rdd1 = rdd.filter(rdd.side == 66)
+    rdd2 = rdd.filter(rdd.side == 83)
 
     rdd1 = rdd1.map(keymod)  # Key hashing
     rdd2 = rdd2.map(keymod)
