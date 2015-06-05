@@ -10,7 +10,6 @@ def main():
     parser_run = subparsers.add_parser('run', help='run analysis')
     parser.add_argument('--config-file')
     args = parser.parse_args()
-    print(args.subparser_name)
     with open(args.config_file, 'r') as config_file:
         config = yaml.load(config_file)
 
