@@ -60,7 +60,7 @@ def cancels_sql(cancels, sqlContext):
 
 def trades_sql(trades, sqlContext):
 
-    schemaString_trades = "id o_id co_id ob_id timestamp side quantity price p_id cp_id"
+    schemaString_trades = "id ref o_id ob_id timestamp side quantity price p_id cp_id"
     fields_trades = []
     for field_name in schemaString_trades.split():
         if(field_name not in ['timestamp']):
@@ -93,7 +93,7 @@ def main(argv):
     conf = SparkConf()
     conf.setAppName("H5 Test 7")
     conf.set("spark.executor.memory", "5g")
-    conf.set("master", "local")
+    conf.set("master", "spark://nandan-spark-cluster-fe:7077")
     sc = SparkContext(conf=conf)
 
     tableindex = {"ORDERS": 3, "CANCELS": 4}
