@@ -12,10 +12,14 @@ def main():
     parser_add = subparsers.add_parser('query')
     parser_am = subparsers.add_parser('analysis')
     parser_aq = subparsers.add_parser('module_query')
+    parser_pr = subparsers.add_parser('print')
+    parser_r = subparsers.add_parser('relation')
 
     parser.add_argument('--config-file')
     parser.add_argument('--filename')
     parser.add_argument('--fileid')
+    parser.add_argument('--featname')
+    parser.add_argument('--parents')
 
     args = parser.parse_args()
     with open(args.config_file, 'r') as config_file:
@@ -29,12 +33,18 @@ def main():
     elif args.subparser_name == 'test':
         print(args.filename)
         sr.test_insert(args.filename)
+    elif args.subparser_name == 'relation':
+        sr.create_relation(args.featname, args.parents)
     elif args.subparser_name == 'query':
         sr.test_query(args.fileid)
     elif args.subparser_name == 'analysis':
         sr.test_analysis()
     elif args.subparser_name == 'module_query':
         sr.query_analysis(args.fileid)
+    elif args.subparser_name == 'print':
+        s = args.fileid
+        s = s.split(',')
+        print(s)
 
 if __name__ == '__main__':
     main()
