@@ -8,6 +8,7 @@ def main():
     subparsers = parser.add_subparsers(dest='subparser_name')
     parser_list = subparsers.add_parser('list', help='list datasets')
     parser_run = subparsers.add_parser('run', help='run analysis')
+    parser_dataimport = subparsers.add_parser('dataimport', help='import dataset')
     parser_test = subparsers.add_parser('test')
     parser_add = subparsers.add_parser('query')
     parser_am = subparsers.add_parser('analysis')
@@ -20,6 +21,11 @@ def main():
     parser.add_argument('--fileid')
     parser.add_argument('--featname')
     parser.add_argument('--parents')
+    parser.add_argument('--params')
+    parser.add_argument('--inputs')
+
+    parser.add_argument('--description')
+    parser.add_argument('--details')
 
     args = parser.parse_args()
     with open(args.config_file, 'r') as config_file:
@@ -29,7 +35,9 @@ def main():
     if args.subparser_name == 'list':
         sr.list_datasets()
     elif args.subparser_name == 'run':
-        sr.run_analysis()
+        sr.run_analysis(args.params, args.inputs)
+    elif args.subparser_name == 'dataimport':
+        sr.create_dataset(args.inputs, args.description, args.details)
     elif args.subparser_name == 'test':
         print(args.filename)
         sr.test_insert(args.filename)

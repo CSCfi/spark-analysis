@@ -34,10 +34,37 @@ def import_hdf5(x, filepath, table):
         return list(data[:])
 
 
+def saveDataset(dataframe, filepath, description, details):
+
+    p = re.compile('.+/(\w+)\.\w+')
+    m = p.match(filepath)
+    filename = m.group(1)
+
+    created = datetime.now()
+    user = getpass.getuser()
+
+    schema = str(dataframe.dtypes)
+    params = defaultdict(str)
+    params['name'] = filename
+    params['fileformat'] = 'Parquet'
+    params['created'] = created
+    params['user'] = user
+
+    params['description'] = description
+    params['details'] = details
+
+    params['filepath'] = filepath
+    params['schema'] = schema
+
+    config = yaml.load("/shared_data/github/spark_analysis/etc/config.yml")
+    sr = SparkRunner(config)
+    sr.create_dataset(params)
+    dataframe.saveAsParquetFile(filepath)
+
+
 def saveFeatures(dataframe, filename, description, details, modulename, module_parameters, parent_datasets):
 
     filepath = "/shared_data/files/" + filename + ".parquet"
-    dataframe.saveAsParquetFile(filepath)
     created = datetime.now()
     user = getpass.getuser()
 
@@ -61,3 +88,4 @@ def saveFeatures(dataframe, filename, description, details, modulename, module_p
     sr = SparkRunner(config)
     sr.create_featureset(params)
     sr.create_relation(filename, parent_datasets)
+    dataframe.saveAsParquetFile(filepath)

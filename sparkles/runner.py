@@ -3,6 +3,7 @@ from sparkles.models import Base, config_to_db_session, fs_to_ds, Dataset, Analy
 from datetime import datetime
 import getpass
 import re
+from subprocess import call
 
 
 class SparkRunner(object):
@@ -12,7 +13,11 @@ class SparkRunner(object):
         self.session = config_to_db_session(config, Base)
 
     def list_analysises(self):
-        raise NotImplementedError
+
+        print('List of available modules')
+        analysismodules = self.session.query(Analysis).all()
+        for am in analysismodules:
+            print(am.name)
 
     def list_datasets(self):
         print('List of available datasets')
@@ -20,11 +25,65 @@ class SparkRunner(object):
         for dataset in datasets:
             print(dataset.name)
 
-    def run_analysis(self, *args, **kwargs):
-        raise NotImplementedError
+    def import_analysis(self, name, description, details, filepath, params, inputs, outputs):
 
-    def create_dataset(self)
-        pass
+        src = filepath
+        dst = "modules/"
+        if(src.endswith('/')):
+            src = src[:-1]
+        if(not dst.endswith('/')):
+            dst = dst + '/'
+
+        filename = os.path.basename(src)
+        dst = dst + filename
+        try:
+            shutil.copytree(src, dst)
+        except OSError as exc:  # If the module is not a package
+            if exc.errno == errno.ENOTDIR:
+                shutil.copy(src, dst)
+            else:
+                raise NotImplementedError
+
+        created = datetime.now()
+        user = getpass.getuser()
+
+        am = Analysis(name=name, filepath=filepath, description=description, details=details, created=created, user=user, parameters=params, inputs=inputs, outputs=outside)
+
+        self.session.add(am)
+        self.session.commit()
+
+    def run_analysis(self, modulename, params, inputs):
+
+        am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
+            params(name=modulename).first()
+
+        inputs = inputs.split(',')
+        filepaths = ''
+        for inputfile in inputs:
+            ds = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+                params(name=inputfile).first()
+            filepath = filepath + ',' + ds.filepath
+
+        call(["/opt/spark/bin/pyspark", "", am.filepath, "--master", "spark://nandan-spark-cluster-fe:7077", params, filepaths])
+
+    def import_dataset(self, inputs, description, details):
+
+        am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
+            params(name="dataimport").first()
+        call(["/opt/spark/bin/pyspark", "", am.filepath, "--master", "spark://nandan-spark-cluster-fe:7077", inputs, description, details])
+
+    def create_dataset(self, params):
+
+        d = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+            params(name=params['name']).first()
+
+        if(d is None):
+
+            ds = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
+            self.session.add(ds)
+            self.session.commit()
+        else:
+            raise ValueError("The dataset with name " + params['name'] + " already exists")
 
     def create_relation(self, featset, parents):
 
@@ -45,12 +104,21 @@ class SparkRunner(object):
         modulename = params['modulename']
         am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
             params(name=modulename).first()
-        module_id = am.id
 
-        ds = Dataset(name=fileid, description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=am.id)
-        self.session.add(ds)
-        self.session.commit()
+        if(am is not None):  # Check if the module exists
 
+            module_id = am.id
+            d = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+                params(name=params['name']).first()
+
+            if(d is None):
+                ds = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=am.id)
+                self.session.add(ds)
+                self.session.commit()
+            else:
+                raise ValueError('The feature set with the name ' + params['name'] + ' already exists')
+        else:
+            raise ValueError('No Such Module')
 
     def test_analysis(self):
         name = __file__
@@ -67,21 +135,34 @@ class SparkRunner(object):
 
     def query_analysis(self, module_id):
 
-        am = self.session.query(Analysis).first()
-        print(am.name)
-        print(am.created)
-        print(am.inputs)
+        am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
+            params(name=module_id).first()
+
+        # am = self.session.query(Analysis).first()
+        if(am is not None):
+            print(am.name)
+            print(am.created)
+            print(am.inputs)
+        else:
+            raise NameError('No Such Module')
 
     def test_insert(self, fileinp):
+
         fileinp = fileinp.split('.')
         fileid = fileinp[0]
-        filepath = "/shared_data/files/FI4000047485/"
-        created = datetime.now()
-        user = getpass.getuser()
-        am = self.session.query(Analysis).first()
-        ds = Dataset(name=fileid, description="", details="", module_parameters="", created=created, user=user, fileformat="Parquet", filepath=filepath, schema="", module_id=am.id)
-        self.session.add(ds)
-        self.session.commit()
+
+        d = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+            params(name=fileid).first()
+        if(d is None):
+            filepath = "/shared_data/files/FI4000047485/"
+            created = datetime.now()
+            user = getpass.getuser()
+            am = self.session.query(Analysis).first()
+            ds = Dataset(name=fileid, description="", details="", module_parameters="", created=created, user=user, fileformat="Parquet", filepath=filepath, schema="", module_id=am.id)
+            self.session.add(ds)
+            self.session.commit()
+        else:
+            raise ValueError("The dataset with the name " + fileid + " already exists")
 
     def test_query(self, fileid):
         dss = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\

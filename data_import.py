@@ -17,7 +17,7 @@ def add_all_dates(filepath):
                     print>>hfile, k
 
 
-def sql(orders, sqlContext):
+def sql(orders, sqlContext, filepath, description, details):
 
     schemaString_orders = "id ref ob_id created destroyed side price quantity is_round past_id new_id p_id"
 
@@ -40,10 +40,11 @@ def sql(orders, sqlContext):
     # for (id, price, side) in results.collect():
     #    print(price)
 
-    schemaOrders.saveAsParquetFile("files/orders_name.parquet")
+    # schemaOrders.saveAsParquetFile("files/orders_name.parquet")
+    saveDataset(schemaOrders, filepath, description, details)
 
 
-def cancels_sql(cancels, sqlContext):
+def cancels_sql(cancels, sqlContext, filepath, description, details):
 
     schemaString_cancels = "id past_id new_id ob_id timestamp side price quantity"
     fields_cancels = []
@@ -55,10 +56,11 @@ def cancels_sql(cancels, sqlContext):
 
     schema_cancels = StructType(fields_cancels)
     schemaCancels = sqlContext.createDataFrame(cancels, schema_cancels)
-    schemaCancels.saveAsParquetFile("files/cancels_name.parquet")
+    # schemaCancels.saveAsParquetFile("files/cancels_name.parquet")
+    saveDataset(schemaCancels, filepath, description, details)
 
 
-def trades_sql(trades, sqlContext):
+def trades_sql(trades, sqlContext, filepath, description, details):
 
     schemaString_trades = "id ref o_id ob_id timestamp side quantity price p_id cp_id"
     fields_trades = []
@@ -70,7 +72,8 @@ def trades_sql(trades, sqlContext):
 
     schema_trades = StructType(fields_trades)
     schemaTrades = sqlContext.createDataFrame(trades, schema_trades)
-    schemaTrades.saveAsParquetFile("files/trades_name.parquet")
+    # schemaTrades.saveAsParquetFile("files/trades_name.parquet")
+    saveDataset(schemaTrades, filepath, description, details)
 
 
 def import_hdf5(x, filepath, table):
@@ -91,39 +94,42 @@ def to_int(x):
 
 def main(argv):
     conf = SparkConf()
-    conf.setAppName("H5 Test 7")
+    conf.setAppName("Data Import")
     conf.set("spark.executor.memory", "5g")
-    conf.set("master", "spark://nandan-spark-cluster-fe:7077")
+    # conf.set("master", "spark://nandan-spark-cluster-fe:7077")
     sc = SparkContext(conf=conf)
+    sc.addFile("/path/to/helper.py")  # To import custom modules
+    from helper import saveDataset   # If you added a file in sc in above step then import it for usage
 
-    tableindex = {"ORDERS": 3, "CANCELS": 4}
-    tablechoice = argv[0]
-    filepath = argv[1]
+    filepaths = str(argv[0])
+    filepaths = filepaths.split(,)
 
-    table = tableindex[tablechoice]
+    description = str(argv[1])
+    details = str(argv[2])
 
-    add_all_dates(filepath)
-    raw_file = sc.textFile("paths/keys.txt")
+    for filepath in filepaths:
+        add_all_dates(filepath)
+        raw_file = sc.textFile("paths/keys.txt")
 
-    rdd1 = raw_file.flatMap(lambda x: import_hdf5(x, filepath, "ORDERS"))
-    rdd1 = rdd1.map(lambda x: list(x))
-    rdd1 = rdd1.map(to_int)
+        rdd1 = raw_file.flatMap(lambda x: import_hdf5(x, filepath, "ORDERS"))
+        rdd1 = rdd1.map(lambda x: list(x))
+        rdd1 = rdd1.map(to_int)
 
-    rdd2 = raw_file.flatMap(lambda x: import_hdf5(x, filepath, "CANCELS"))
-    rdd2 = rdd2.map(lambda x: list(x))
-    rdd2 = rdd2.map(to_int)
+        rdd2 = raw_file.flatMap(lambda x: import_hdf5(x, filepath, "CANCELS"))
+        rdd2 = rdd2.map(lambda x: list(x))
+        rdd2 = rdd2.map(to_int)
 
-    rdd3 = raw_file.flatMap(lambda x: import_hdf5(x, filepath, "TRADES"))
-    rdd3 = rdd3.map(lambda x: list(x))
-    rdd3 = rdd3.map(to_int)
+        rdd3 = raw_file.flatMap(lambda x: import_hdf5(x, filepath, "TRADES"))
+        rdd3 = rdd3.map(lambda x: list(x))
+        rdd3 = rdd3.map(to_int)
 
-    # d = rdd.count()
-    # print(d)
+        # d = rdd.count()
+        # print(d)
 
-    sqlContext = SQLContext(sc)
-    sql(rdd1, sqlContext)
-    cancels_sql(rdd2, sqlContext)
-    trades_sql(rdd3, sqlContext)
+        sqlContext = SQLContext(sc)
+        sql(rdd1, sqlContext, filepath, description, details)
+        cancels_sql(rdd2, sqlContext, filepath, description, details)
+        trades_sql(rdd3, sqlContext, filepath, description, details)
 
 
 if __name__ == '__main__':
