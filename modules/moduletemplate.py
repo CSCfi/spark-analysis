@@ -3,6 +3,7 @@ from datetime import datetime, date, timedelta
 import sys
 from operator import add
 from pyspark.sql import *
+# from helper import saveFeatures   # If you added a file in sc (in main) then import it for usage
 
 
 # A General dummy function to be used in Map , it transforms the epoch time into human readable format
@@ -58,7 +59,6 @@ def main(args):
     sc = SparkContext(conf=conf)  # Spark Context variable that will be used for all operations running on the cluster
 
     # sc.addFile("/path/to/helper.py")  # To import custom modules
-    # from helper import saveFeatures   # If you added a file in sc in above step then import it for usage
 
     your_module_implementation(sc, params, inputs)
 

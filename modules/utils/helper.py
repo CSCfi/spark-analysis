@@ -3,8 +3,11 @@ from datetime import datetime, date, timedelta
 from collections import defaultdict
 import getpass
 import re
-from sparkles.runner import SparkRunner
+from runner import SparkRunner
 import yaml
+import os
+from os.path import dirname
+import errno
 
 
 # Hack for using HDF5 datasets in Spark, also fetches the data from dataset using the dates provided by user
@@ -34,14 +37,17 @@ def import_hdf5(x, filepath, table):
         return list(data[:])
 
 
-def saveDataset(dataframe, filepath, description, details):
+def saveDataset(dataframe, tablename, originalpath, description, details):
 
     p = re.compile('.+/(\w+)\.\w+')
-    m = p.match(filepath)
+    m = p.match(originalpath)
     filename = m.group(1)
 
     created = datetime.now()
     user = getpass.getuser()
+
+    filedir = dirname(dirname(dirname(os.path.abspath(__file__)))) + '/data/files/' + filename
+    tablepath = filedir + '/' + filename + '_' + tablename + '.parquet'
 
     schema = str(dataframe.dtypes)
     params = defaultdict(str)
@@ -53,13 +59,23 @@ def saveDataset(dataframe, filepath, description, details):
     params['description'] = description
     params['details'] = details
 
-    params['filepath'] = filepath
+    params['filepath'] = filedir
     params['schema'] = schema
 
-    config = yaml.load("/shared_data/github/spark_analysis/etc/config.yml")
-    sr = SparkRunner(config)
-    sr.create_dataset(params)
-    dataframe.saveAsParquetFile(filepath)
+    if(tablename == "orders"):
+        with open("/shared_data/github/spark-analysis/etc/config.yml", 'r') as config_file:
+            config = yaml.load(config_file)
+
+        sr = SparkRunner(config)
+        sr.create_dataset(params)
+
+    try:
+        os.makedirs(filedir)
+    except OSError as exception:
+        if exception.errno != errno.EEXIST:
+            raise
+
+    dataframe.saveAsParquetFile(tablepath)
 
 
 def saveFeatures(dataframe, filename, description, details, modulename, module_parameters, parent_datasets):
