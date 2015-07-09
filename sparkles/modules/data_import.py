@@ -7,21 +7,22 @@ import sys
 from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerType, LongType
 import os
 from os.path import dirname
-from helper import saveDataset   # If you added a file in sc in above step then import it for usage
+from tempfile import NamedTemporaryFile
+from utils.helper import saveDataset   # If you added a file in sc in above step then import it for usage
 
 
 def add_all_dates(originalpath):
 
-    d = dirname(dirname(os.path.abspath(__file__)))
-    d = d + '/data/paths'
+    hfile = NamedTemporaryFile(delete=False, dir='/shared_data/tmp')
     with h5py.File(originalpath) as curr_file:
-        with open(d + '/keys.txt', 'w') as hfile:
-                filekeys = curr_file.keys()
-                for k in filekeys:
-                    print>>hfile, k
+            filekeys = curr_file.keys()
+            for k in filekeys:
+                print>>hfile, k
+    hfile.close()
+    return hfile
 
 
-def sql(orders, sqlContext, originalpath, description, details):
+def sql(orders, sqlContext, userdatadir, originalpath, description, details):
 
     schemaString_orders = "id ref ob_id created destroyed side price quantity is_round past_id new_id p_id"
 
@@ -45,10 +46,10 @@ def sql(orders, sqlContext, originalpath, description, details):
     #    print(price)
 
     # schemaOrders.saveAsParquetFile("files/orders_name.parquet")
-    saveDataset(schemaOrders, "orders", originalpath, description, details)
+    saveDataset(schemaOrders, userdatadir, "orders", originalpath, description, details)
 
 
-def cancels_sql(cancels, sqlContext, originalpath, description, details):
+def cancels_sql(cancels, sqlContext, userdatadir, originalpath, description, details):
 
     schemaString_cancels = "id past_id new_id ob_id timestamp side price quantity"
     fields_cancels = []
@@ -61,10 +62,10 @@ def cancels_sql(cancels, sqlContext, originalpath, description, details):
     schema_cancels = StructType(fields_cancels)
     schemaCancels = sqlContext.createDataFrame(cancels, schema_cancels)
     # schemaCancels.saveAsParquetFile("files/cancels_name.parquet")
-    saveDataset(schemaCancels, "cancels", originalpath, description, details)
+    saveDataset(schemaCancels, userdatadir, "cancels", originalpath, description, details)
 
 
-def trades_sql(trades, sqlContext, originalpath, description, details):
+def trades_sql(trades, sqlContext, userdatadir, originalpath, description, details):
 
     schemaString_trades = "id ref o_id ob_id timestamp side quantity price p_id cp_id"
     fields_trades = []
@@ -77,7 +78,7 @@ def trades_sql(trades, sqlContext, originalpath, description, details):
     schema_trades = StructType(fields_trades)
     schemaTrades = sqlContext.createDataFrame(trades, schema_trades)
     # schemaTrades.saveAsParquetFile("files/trades_name.parquet")
-    saveDataset(schemaTrades, "trades", originalpath, description, details)
+    saveDataset(schemaTrades, userdatadir, "trades", originalpath, description, details)
 
 
 def import_hdf5(x, originalpath, table):
@@ -104,9 +105,9 @@ def main(argv):
 
     d = dirname(dirname(os.path.abspath(__file__)))
     print(d)
-    d = d + '/data/paths'
 
-    sc.addFile("helper.py")  # To import custom modules
+    helperpath = dirname(os.path.abspath(__file__))
+    sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
     originalpaths = str(argv[0])
     originalpaths = originalpaths.split(',')
@@ -114,10 +115,14 @@ def main(argv):
     description = str(argv[1])
     details = str(argv[2])
 
-    for originalpath in originalpaths:
-        add_all_dates(originalpath)
-        raw_file = sc.textFile(d + "/keys.txt")
+    userdatadir = str(argv[3])
 
+    for originalpath in originalpaths:
+        hfile = add_all_dates(originalpath)
+        # print(hfile.name)
+        # print(d + '/keys.txt')
+
+        raw_file = sc.textFile('file://' + hfile.name)
         rdd1 = raw_file.flatMap(lambda x: import_hdf5(x, originalpath, "ORDERS"))
         rdd1 = rdd1.map(lambda x: list(x))
         rdd1 = rdd1.map(to_int)
@@ -130,13 +135,14 @@ def main(argv):
         rdd3 = rdd3.map(lambda x: list(x))
         rdd3 = rdd3.map(to_int)
 
-        # d = rdd.count()
+        # d = rdd1.count()
         # print(d)
 
         sqlContext = SQLContext(sc)
-        sql(rdd1, sqlContext, originalpath, description, details)
-        cancels_sql(rdd2, sqlContext, originalpath, description, details)
-        trades_sql(rdd3, sqlContext, originalpath, description, details)
+        sql(rdd1, sqlContext, userdatadir, originalpath, description, details)
+        cancels_sql(rdd2, sqlContext, userdatadir, originalpath, description, details)
+        trades_sql(rdd3, sqlContext, userdatadir, originalpath, description, details)
+        os.unlink(hfile.name)
 
 
 if __name__ == '__main__':

@@ -4,11 +4,23 @@ from datetime import datetime
 import getpass
 import re
 from subprocess import call
+import yaml
+import os
+from os.path import dirname
+import shutil
+import errno
 
 
 class SparkRunner(object):
 
-    def __init__(self, config):
+    def __init__(self, configpath=None):
+
+        config = None
+        if(configpath is None):
+            configpath = 'config.yml'
+        with open(configpath, 'r') as config_file:
+            config = yaml.load(config_file)
+
         print(config)
         self.session = config_to_db_session(config, Base)
 
@@ -25,10 +37,10 @@ class SparkRunner(object):
         for dataset in datasets:
             print(dataset.name)
 
-    def import_analysis(self, name, description, details, filepath, params, inputs, outputs):
+    def import_analysis(self, destination, name, description, details, filepath, params, inputs, outputs):
 
         src = filepath
-        dst = "modules/"
+        dst = destination
         if(src.endswith('/')):
             src = src[:-1]
         if(not dst.endswith('/')):
@@ -36,18 +48,11 @@ class SparkRunner(object):
 
         filename = os.path.basename(src)
         dst = dst + filename
-        try:
-            shutil.copytree(src, dst)
-        except OSError as exc:  # If the module is not a package
-            if exc.errno == errno.ENOTDIR:
-                shutil.copy(src, dst)
-            else:
-                raise NotImplementedError
-
+        shutil.copy(src, dst)
         created = datetime.now()
         user = getpass.getuser()
 
-        am = Analysis(name=name, filepath=filepath, description=description, details=details, created=created, user=user, parameters=params, inputs=inputs, outputs=outside)
+        am = Analysis(name=name, filepath=filepath, description=description, details=details, created=created, user=user, parameters=params, inputs=inputs, outputs=outputs)
 
         self.session.add(am)
         self.session.commit()
@@ -56,21 +61,23 @@ class SparkRunner(object):
 
         am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
             params(name=modulename).first()
-
+        print(am.filepath)
         inputs = inputs.split(',')
         filepaths = ''
         for inputfile in inputs:
             ds = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
                 params(name=inputfile).first()
-            filepath = filepath + ',' + ds.filepath
+            print(ds.filepath)
+            filepaths = filepaths + ',' + ds.filepath
 
-        call(["/opt/spark/bin/pyspark", "", am.filepath, "--master", "spark://nandan-spark-cluster-fe:7077", params, filepaths])
+        call(["/opt/spark/bin/pyspark", am.filepath, "--master", "spark://nandan-spark-cluster-fe:7077", params, filepaths])
 
-    def import_dataset(self, inputs, description, details):
+    def import_dataset(self, inputs, description, details, userdatadir):
 
         # am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
         #    params(name="dataimport").first()
-        call(["/opt/spark/bin/pyspark", "/shared_data/github/spark-analysis/modules/data_import.py", "--master", "spark://nandan-spark-cluster-fe:7077", inputs, description, details])
+        path = dirname(dirname(os.path.abspath(__file__)))
+        call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", "spark://nandan-spark-cluster-fe:7077", inputs, description, details, userdatadir])
 
     def create_dataset(self, params):
 

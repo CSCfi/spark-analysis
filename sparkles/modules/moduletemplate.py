@@ -49,8 +49,8 @@ def your_module_implementation(sc, params, inputs):
 
 def main(args):
 
-    params = str(args[1]).split(,)
-    inputs = str(args[2]).split(,)
+    params = str(args[1]).split(',')
+    inputs = str(args[2]).split(',')
 
     # Configure Spark
     conf = SparkConf()
