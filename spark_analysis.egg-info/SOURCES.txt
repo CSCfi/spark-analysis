@@ -8,11 +8,10 @@ sparkles/__init__.py
 sparkles/modules/__init__.py
 sparkles/modules/data_import.py
 sparkles/modules/event_count.py
+sparkles/modules/event_count_parquet.py
 sparkles/modules/liq_curve.py
 sparkles/modules/liq_curve_parquet.py
 sparkles/modules/moduletemplate.py
-sparkles/modules/event_count_parquet/__init__.py
-sparkles/modules/event_count_parquet/event_count_parquet.py
 sparkles/modules/tests/__init__.py
 sparkles/modules/utils/__init__.py
 sparkles/modules/utils/config.yml

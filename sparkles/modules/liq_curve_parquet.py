@@ -65,10 +65,10 @@ def main(argv):
 
     index = tableindex[tablename]
 
-    filepath = str(inputs[0])  # Provide the complete path
+    filepath = str(inputs[1])  # Provide the complete path
     filename = os.path.basename(os.path.abspath(filepath))
-
-    tablepath = filepath + '/' + filename + '_' + tablename + '.parquet'
+    print(filepath)
+    tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
 
     # filepath = "file:///shared_data//paths//" + filepath
     print(tablepath)
@@ -109,7 +109,7 @@ def main(argv):
     rdd = rdd.map(lambda x: (x[0], (list(x[1][0]), list(x[1][1]))))  # Iterable object to list
     rdd = rdd.map(flatten_lists)
 
-    # rdd = rdd.sortByKey()
+    rdd = rdd.sortByKey()
     # rdd = rdd.map(timetr)
     d = rdd.collect()
 
