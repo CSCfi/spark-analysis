@@ -64,7 +64,7 @@ def saveDataset(dataframe, userdatadir, tablename, originalpath, description, de
     params['schema'] = schema
 
     if(tablename == "orders"):
-        configpath = "/shared_data/github/spark-analysis/etc/config.yml"
+        configpath = "/shared_data/etc/config.yml"
         sr = SparkRunner(configpath)
         sr.create_dataset(params)
 
@@ -77,16 +77,16 @@ def saveDataset(dataframe, userdatadir, tablename, originalpath, description, de
     dataframe.saveAsParquetFile(tablepath)
 
 
-def saveFeatures(dataframe, userdatadir, filename, description, details, modulename, module_parameters, parent_datasets):
+def saveFeatures(dataframe, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
     # filepath = "/shared_data/files/" + filename + ".parquet"
-    filepath = userdatadir + filename + ".parquet"
+    filepath = userdatadir + '/' + featureset_name + ".parquet"
     created = datetime.now()
     user = getpass.getuser()
 
     schema = str(dataframe.dtypes)
     params = defaultdict(str)
-    params['name'] = filename
+    params['name'] = featureset_name
     params['fileformat'] = 'Parquet'
     params['created'] = created
     params['user'] = user
@@ -100,8 +100,8 @@ def saveFeatures(dataframe, userdatadir, filename, description, details, modulen
     params['filepath'] = filepath
     params['schema'] = schema
 
-    configpath = "/shared_data/github/spark_analysis/etc/config.yml"
+    configpath = "/shared_data/etc/config.yml"
     sr = SparkRunner(configpath)
     sr.create_featureset(params)
-    sr.create_relation(filename, parent_datasets)
+    sr.create_relation(featureset_name, parent_datasets)
     dataframe.saveAsParquetFile(filepath)

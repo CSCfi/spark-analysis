@@ -9,6 +9,8 @@ import os
 from os.path import dirname
 import shutil
 import errno
+from swiftclient.service import *
+import json
 
 
 class SparkRunner(object):
@@ -17,25 +19,30 @@ class SparkRunner(object):
 
         config = None
         if(configpath is None):
-            configpath = 'config.yml'
+            configpath = '/shared_data/etc/config.yml'
         with open(configpath, 'r') as config_file:
             config = yaml.load(config_file)
 
         print(config)
         self.session = config_to_db_session(config, Base)
+        self.config = config
 
-    def list_analysises(self):
+    def list_modules(self):
 
         print('List of available modules')
         analysismodules = self.session.query(Analysis).all()
-        for am in analysismodules:
-            print(am.name)
+        for amodule in analysismodules:
+            print('Name: ' + amodule.name + '|Description: ' + amodule.description + '|Details: ' + amodule.details)
 
     def list_datasets(self):
         print('List of available datasets')
         datasets = self.session.query(Dataset).all()
         for dataset in datasets:
-            print(dataset.name)
+            if(dataset.module is None):
+                print(dataset.name + '|Description: ' + dataset.description + '|Details: ' + dataset.details)
+            else:
+                print(dataset.name + '|Description: ' + dataset.description + '|Details: ' + dataset.details + '|Module used: ' + dataset.module.name + '|Parameters used: ' + dataset.module_parameters + '|Parents: ' + json.dumps(list(map((lambda x: x.name), dataset.parents))))
+            print('****************************')
 
     def import_analysis(self, destination, name, description, details, filepath, params, inputs, outputs):
 
@@ -48,60 +55,116 @@ class SparkRunner(object):
 
         filename = os.path.basename(src)
         dst = dst + filename
-        shutil.copy(src, dst)
+        # shutil.copy(src, dst)
         created = datetime.now()
         user = getpass.getuser()
 
-        am = Analysis(name=name, filepath=filepath, description=description, details=details, created=created, user=user, parameters=params, inputs=inputs, outputs=outputs)
+        checkMod = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
+            params(name=name).first()
 
-        self.session.add(am)
-        self.session.commit()
+        if(checkMod is None):
+            analysisMod = Analysis(name=name, filepath=filename, description=description, details=details, created=created, user=user, parameters=params, inputs=inputs, outputs=outputs)
+            self.session.add(analysisMod)
+            self.session.commit()
 
-    def run_analysis(self, modulename, params, inputs):
+            # Upload the metadata and module to swift
+            options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
+            swiftService = SwiftService(options=options)
+            objects = []
+            objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='sqlite.db'))
+            objects.append(SwiftUploadObject(filepath, object_name=filename))
 
-        am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
-            params(name=modulename).first()
-        print(am.filepath)
-        inputs = inputs.split(',')
-        filepaths = ''
-        for inputfile in inputs:
-            ds = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-                params(name=inputfile).first()
-            print(ds.filepath)
-            filepaths = filepaths + ',' + ds.filepath
+            swiftUpload = swiftService.upload(container='containerModules', objects=objects)
+            uploadedIndex = 0
+            for uploaded in swiftUpload:
+                if(uploadedIndex == 1):
+                    print('Metadata changed and uploaded')
+                elif(uploadedIndex == 2):
+                    print('Module uploaded')
+                uploadedIndex = uploadedIndex + 1
+        else:
+            print("Analysis " + name + " already exists")
 
-        call(["/opt/spark/bin/pyspark", am.filepath, "--master", "spark://nandan-spark-cluster-fe:7077", params, filepaths])
+    def run_analysis(self, modulename=None, params=None, inputs=None, features=None):
+
+        if(modulename is None or params is None or inputs is None):
+            print('Modulename, params and inputs are mandatory')
+        else:
+            analysisMod = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
+                params(name=modulename).first()
+            filepaths = ''
+            filepathsarr = []
+
+            # Download the module from swift first
+            options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
+            swiftService = SwiftService(options=options)
+
+            out_file = '/shared_data/mods/' + analysisMod.filepath
+            localoptions = {'out_file': out_file}
+            objects = []
+            objects.append(analysisMod.filepath)
+            swiftDownload = swiftService.download(container='containerModules', objects=objects, options=localoptions)
+
+            for downloaded in swiftDownload:
+                print(downloaded)
+
+            for inputfile in inputs:
+                dataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+                    params(name=inputfile).first()
+                filepathsarr.append(dataset.filepath)
+
+            filepaths = json.dumps(filepathsarr)
+            params = json.dumps(params)
+            features = json.dumps(features)
+
+            if(features is None):
+                call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], params, filepaths])
+            else:
+                call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], params, filepaths, features])
 
     def import_dataset(self, inputs, description, details, userdatadir):
 
         # am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
         #    params(name="dataimport").first()
         path = dirname(dirname(os.path.abspath(__file__)))
-        call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", "spark://nandan-spark-cluster-fe:7077", inputs, description, details, userdatadir])
+        call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.config['CLUSTER_URL'], inputs, description, details, userdatadir])
 
     def create_dataset(self, params):
 
-        d = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+        checkDataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
             params(name=params['name']).first()
 
-        if(d is None):
+        if(checkDataset is None):
 
-            ds = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
-            self.session.add(ds)
+            dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
+            self.session.add(dataset)
             self.session.commit()
+
+            options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
+            swiftService = SwiftService(options=options)
+            objects = []
+            objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='sqlite.db'))
+
+            swiftUpload = swiftService.upload(container='containerModules', objects=objects)
+            for uploaded in swiftUpload:
+                print("Metadata changed and uploaded")
+
         else:
             raise ValueError("The dataset with name " + params['name'] + " already exists")
 
     def create_relation(self, featset, parents):
 
-        fs = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+        featureset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
             params(name=featset).first()
-        parents = parents.split(',')
-        for p in parents:
-            dss = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-                params(name=p).first()
-
-            f = fs_to_ds.insert().values(left_fs_id=fs.id, right_ds_id=dss.id)
+        print(featset)
+        print(featureset)
+        parents = json.loads(parents)
+        print(parents)
+        for parent in parents:
+            dataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+                params(name=parent).first()
+            print(dataset)
+            f = fs_to_ds.insert().values(left_fs_id=featureset.id, right_ds_id=dataset.id)
             self.session.execute(f)
 
         self.session.commit()
@@ -109,76 +172,29 @@ class SparkRunner(object):
     def create_featureset(self, params):
 
         modulename = params['modulename']
-        am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
+        analysisMod = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
             params(name=modulename).first()
 
-        if(am is not None):  # Check if the module exists
+        if(analysisMod is not None):  # Check if the module exists
 
-            module_id = am.id
-            d = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+            module_id = analysisMod.id
+            checkDataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
                 params(name=params['name']).first()
 
-            if(d is None):
-                ds = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=am.id)
-                self.session.add(ds)
+            print('Features ' + params['name'])
+            if(checkDataset is None):
+                dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id)
+                self.session.add(dataset)
                 self.session.commit()
+
+                options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
+                swiftService = SwiftService(options=options)
+                objects = []
+                objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='metadata'))
+                swiftUpload = swiftService.upload(container='containerModules', objects=objects)
+                for uploaded in swiftUpload:
+                    print("Metadata changed and uploaded")
             else:
                 raise ValueError('The feature set with the name ' + params['name'] + ' already exists')
         else:
             raise ValueError('No Such Module')
-
-    def test_analysis(self):
-        name = __file__
-        p = re.compile('.+/(\w+)\.\w+')
-        m = p.match(name)
-        name = m.group(1)
-        filepath = '/shared_data/modules/test.py'
-        created = datetime.now()
-        user = getpass.getuser()
-
-        am = Analysis(name=name, filepath=filepath, description="Counts the events", details="", created=created, user=user, parameters="Time interval", inputs="Market table", outputs="Feature dataset with time and counts")
-        self.session.add(am)
-        self.session.commit()
-
-    def query_analysis(self, module_id):
-
-        am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
-            params(name=module_id).first()
-
-        # am = self.session.query(Analysis).first()
-        if(am is not None):
-            print(am.name)
-            print(am.created)
-            print(am.inputs)
-        else:
-            raise NameError('No Such Module')
-
-    def test_insert(self, fileinp):
-
-        fileinp = fileinp.split('.')
-        fileid = fileinp[0]
-
-        d = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-            params(name=fileid).first()
-        if(d is None):
-            filepath = "/shared_data/files/FI4000047485/"
-            created = datetime.now()
-            user = getpass.getuser()
-            am = self.session.query(Analysis).first()
-            ds = Dataset(name=fileid, description="", details="", module_parameters="", created=created, user=user, fileformat="Parquet", filepath=filepath, schema="", module_id=am.id)
-            self.session.add(ds)
-            self.session.commit()
-        else:
-            raise ValueError("The dataset with the name " + fileid + " already exists")
-
-    def test_query(self, fileid):
-        dss = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-            params(name=fileid).all()
-        for ds in dss:
-            print(ds.name)
-            print(ds.parents)
-            print(ds.derived)
-            print(ds.id)
-            print(ds.module_id)
-            print(ds.module.name)
-            print(ds.module.filepath)

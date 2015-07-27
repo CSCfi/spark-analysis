@@ -101,6 +101,7 @@ def main(argv):
     conf.setAppName("Data Import")
     conf.set("spark.executor.memory", "5g")
     # conf.set("master", "spark://nandan-spark-cluster-fe:7077")
+    conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 
     d = dirname(dirname(os.path.abspath(__file__)))

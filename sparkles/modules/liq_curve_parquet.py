@@ -6,6 +6,7 @@ import sys
 from operator import add
 from pyspark.sql import *
 import os
+import json
 
 
 # Hash the keys into different time interval periods and prices
@@ -47,25 +48,26 @@ def main(argv):
     # conf.setMaster("local")
     conf.setAppName("Liq Cost Parquet")
     conf.set("spark.executor.memory", "5g")
+    conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 
-    params = str(argv[1]).split(',')
-    inputs = str(argv[2]).split(',')
+    params = json.loads(str(argv[1]))
+    inputs = json.loads(str(argv[2]))
 
     tableindex = {"ORDERS": 3, "CANCELS": 4}
-    tablename = str(params[0])
+    tablename = str(params['tablename'])
 
-    start_time = int(params[1]) / 1000.0
-    s = int(params[1])
+    start_time = int(params['start_time']) / 1000.0
+    s = int(params['start_time'])
 
-    end_time = int(params[2]) / 1000.0
-    e = int(params[2])
+    end_time = int(params['end_time']) / 1000.0
+    e = int(params['end_time'])
 
-    interval = float(params[3])
+    interval = float(params['interval'])
 
     index = tableindex[tablename]
 
-    filepath = str(inputs[1])  # Provide the complete path
+    filepath = str(inputs[0])  # Provide the complete path
     filename = os.path.basename(os.path.abspath(filepath))
     print(filepath)
     tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'

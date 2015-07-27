@@ -1,9 +1,14 @@
+import h5py
 from pyspark import SparkConf, SparkContext
+from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerType, LongType
 from datetime import datetime, date, timedelta
 import sys
 from operator import add
 from pyspark.sql import *
-# from helper import saveFeatures   # If you added a file in sc (in main) then import it for usage
+import os
+import json
+from utils.helper import saveFeatures  # If you need to save result as a feature set
+from os.path import dirname
 
 
 # A General dummy function to be used in Map , it transforms the epoch time into human readable format
@@ -11,21 +16,39 @@ from pyspark.sql import *
 #    dt = datetime.fromtimestamp(x.timefield).strftime('%Y-%m-%d %H:%M:%S.%f')
 #    return (dt, x)
 
+# This function is used only when you want to save your results as a feature set
+def saveResult(x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
-def your_module_implementation(sc, params, inputs):
+    schemaString = "field1 field2"
 
-    param1 = int(params[0])  # First convert all the parameters with their proper types
-    param2 = str(params[1])
-    # param3 = float(params['param3']
-    # param4 = long(params['param4'])
+    fields_rdd = []
+    for field_name in schemaString.split():
+        if(field_name == 'field1'):
+            fields_rdd.append(StructField(field_name, IntegerType(), True))
+        else:
+            fields_rdd.append(StructField(field_name, StringType(), True))
 
-    inputfile = inputs[0]  # As if now it is expected that each module will run on a single dataset
-    # inputfile2 = inputs[1]  #But it is possible to use another file and create dataframe for it and apply joining
+    schema_rdd = StructType(fields_rdd)
+    dfRdd = sqlContext.createDataFrame(x, schema_rdd)
+    saveFeatures(dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
+
+
+# This is the function where you will write your module with logic and implementation
+def your_module_implementation(sc, params=None, inputs=None, features=None):
+
+    tablename = str(params['tablename'])  # Mandatory parameter
+    # start_time = int(params['start_time']) / 1000.0  # Convert each parameter to their correct types
+    # end_time = int(params['end_time']) / 1000.0
+    # interval = float(params['interval'])
+
+    filepath = str(inputs[0])  # Provide the complete path
+    filename = os.path.basename(os.path.abspath(filepath))
+    tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
 
     sqlContext = SQLContext(sc)  # Create SQLContext var from SparkContext, Useful only if you are using dataframes i.e. parquet files
-    rdd = sqlContext.parquetFile(inputfile)
+    rdd = sqlContext.parquetFile(tablepath)
     rdd.registerTempTable("tablename")  # Register the table in parquet file for our usage with SQL queries
-    rdd = sqlContext.sql("SELECT fields from tablename")  # A dataframe is returned which can be used as an RDD
+    rdd = sqlContext.sql("SELECT fields from tablename WHERE field_name == criteria")  # A dataframe is returned which can be used as an RDD
 
     # rdd1 = rdd.filter(rdd.somefieldname == somecriteria)  # Example of filtering
     # rdd1 = rdd1.map(somemapfunction)  # Applying transformation to the RDD by passing custom functions to map
@@ -37,30 +60,41 @@ def your_module_implementation(sc, params, inputs):
     # for k in d:  # Print out the results
     #    print(k)
 
+    # If you need to save the results as feature set use this parameters as well
+    # userdatadir = str(features['userdatadir'])
+    # description = str(features['description'])
+    # details = str(features['details'])
+    # featureset_name = str(features['featureset_name'])
+    # modulename = str(features['modulename'])
+
     # For saving the results to a parquet file
     # Convert the RDD to a dataframe first by defining the schema
 
-    p = re.compile('.+/(\w+)\.\w+')
-    modulename = p.match(__file__).group(1)
-    params_used = ','.join(params)
-    saveFeatures(dataframe, "feature-dataset-name", "short description", "details", modulename, params_used, inputs)
+    # parent_datasets = []
+    # parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
+    # saveResult(rdd1, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
+
     sc.stop()
 
 
 def main(args):
 
-    params = str(args[1]).split(',')
-    inputs = str(args[2]).split(',')
-
     # Configure Spark
     conf = SparkConf()
     conf.setAppName("Application name")
     conf.set("spark.executor.memory", "5g")
+    conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)  # Spark Context variable that will be used for all operations running on the cluster
 
-    # sc.addFile("/path/to/helper.py")  # To import custom modules
+    helperpath = dirname(os.path.abspath(__file__))
+    sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
+    # Create a dict and pass it in your_module_implementation
+    params = json.loads(str(argv[1]))
+    inputs = json.loads(str(argv[2]))
+    # features = json.loads(str(argv[3]))  # Only used when you want to create a feature set
 
-    your_module_implementation(sc, params, inputs)
+    your_module_implementation(sc, params=params, inputs=inputs, features=features)
+
 
 if __name__ == "__main__":
     main(sys.argv)

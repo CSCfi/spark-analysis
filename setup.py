@@ -13,16 +13,16 @@ setup(
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='1.2.0',
+    version='1.0',
 
-    description='A sample Python project',
+    description='Library to import hdf5 files and then run analysis',
 
     # The project's main homepage.
     url='https://github.com/pypa/sampleproject',
 
     # Author details
-    author='The Python Packaging Authority',
-    author_email='pypa-dev@googlegroups.com',
+    author='Apurva Nandan',
+    author_email='apurva.nandan@csc.fi',
 
     # Choose your license
     license='MIT',
@@ -44,17 +44,12 @@ setup(
 
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.2',
-        'Programming Language :: Python :: 3.3',
-        'Programming Language :: Python :: 3.4',
     ],
 
     # What does your project relate to?
-    keywords='sample setuptools development',
+    keywords='spark bigdata cloud analysis',
 
     # You can just specify the packages manually here if your project is
     # simple. Or you can use find_packages().

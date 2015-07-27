@@ -1,2 +1,8 @@
----
-DATABASE_URI: 'sqlite:////tmp/sqlite.db'
+DATABASE_URI: 'sqlite:////shared_data/etc/sqlite.db'
+DB_LOCATION: '/shared_data/etc/sqlite.db'
+CLUSTER_URL: 'spark://nandan-spark-cluster-fe:7077'
+SWIFT_AUTH_URL: 'https://pouta-test.csc.fi:5001/v2.0'
+SWIFT_USERNAME: ''
+SWIFT_PASSWORD: ''
+SWIFT_TENANT_ID: 'kanniain'
+SWIFT_TENANT_NAME: 'kanniain'
