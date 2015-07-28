@@ -9,6 +9,7 @@ import os
 import json
 from sparkles.modules.utils.helper import saveFeatures
 
+
 # Hash the keys into different time interval periods and prices
 def keymod(x, start_time, interval):
 
