@@ -16,7 +16,7 @@ def date_query(x, start_time, end_time):
     end = date.fromtimestamp(end_time)
 
     delta = timedelta(days=1)
-    filepath = '//shared_data//files//' + x
+    filepath = 'filepath here' + x
     with h5py.File(filepath) as curr_file:
         res = []
         while start <= end:
@@ -31,13 +31,12 @@ def date_query(x, start_time, end_time):
 
 def import_hdf5(x, filepath, table):
 
-    # filepath = 'files/' + filepath
     with h5py.File(filepath) as f:
         data = f[str(x)].get(table)
         return list(data[:])
 
 
-def saveDataset(dataframe, tablename, originalpath, description, details):
+def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, description, details):
 
     p = re.compile('.+/(\w+)\.\w+')
     m = p.match(originalpath)
@@ -46,7 +45,7 @@ def saveDataset(dataframe, tablename, originalpath, description, details):
     created = datetime.now()
     user = getpass.getuser()
 
-    filedir = dirname(dirname(dirname(os.path.abspath(__file__)))) + '/data/files/' + filename
+    filedir = userdatadir + '/' + filename
     tablepath = filedir + '/' + filename + '_' + tablename + '.parquet'
 
     schema = str(dataframe.dtypes)
@@ -63,30 +62,27 @@ def saveDataset(dataframe, tablename, originalpath, description, details):
     params['schema'] = schema
 
     if(tablename == "orders"):
-        with open("/shared_data/github/spark-analysis/etc/config.yml", 'r') as config_file:
-            config = yaml.load(config_file)
-
-        sr = SparkRunner(config)
+        sr = SparkRunner(configpath)
         sr.create_dataset(params)
 
-    try:
-        os.makedirs(filedir)
-    except OSError as exception:
-        if exception.errno != errno.EEXIST:
-            raise
+    # try:
+    #    os.makedirs(filedir)
+    # except OSError as exception:
+    #    if exception.errno != errno.EEXIST:
+    #        raise
 
     dataframe.saveAsParquetFile(tablepath)
 
 
-def saveFeatures(dataframe, filename, description, details, modulename, module_parameters, parent_datasets):
+def saveFeatures(configpath, dataframe, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
-    filepath = "/shared_data/files/" + filename + ".parquet"
+    filepath = userdatadir + '/' + featureset_name + ".parquet"
     created = datetime.now()
     user = getpass.getuser()
 
     schema = str(dataframe.dtypes)
     params = defaultdict(str)
-    params['name'] = filename
+    params['name'] = featureset_name
     params['fileformat'] = 'Parquet'
     params['created'] = created
     params['user'] = user
@@ -100,8 +96,7 @@ def saveFeatures(dataframe, filename, description, details, modulename, module_p
     params['filepath'] = filepath
     params['schema'] = schema
 
-    config = yaml.load("/shared_data/github/spark_analysis/etc/config.yml")
-    sr = SparkRunner(config)
+    sr = SparkRunner(configpath)
     sr.create_featureset(params)
-    sr.create_relation(filename, parent_datasets)
+    sr.create_relation(featureset_name, parent_datasets)
     dataframe.saveAsParquetFile(filepath)

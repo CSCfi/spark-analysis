@@ -7,8 +7,8 @@ from sqlalchemy.orm import sessionmaker, relationship
 Base = declarative_base()
 
 
-def config_to_db_session(config, Base):
-    engine = create_engine(config['DATABASE_URI'])
+def config_to_db_session(config_dbpath, Base):
+    engine = create_engine(config_dbpath)
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine)()
 
