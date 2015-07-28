@@ -3,25 +3,31 @@
 # Spark Analysis
 Analyzing large datasets using spark 
 
-# Directory Structure (Before running)
-Place 'etc' and 'spar_jars' folders in /shared_data. Modify the config.yml.template in etc folder
-Create 'mods' and 'tmp' empty directories in /shared_data
 
 # Installation
 python setup.py sdist to make the distribution.
-pip install <foldername> to install (run from parent directory)
+pip install ./<foldername> to install (run from parent directory)
+
+#Directory Structures (Before Installation)
+Place 'etc' and 'spark_jars' in the shared data folder of your cluster. Create tmp and mods directories in shared data folder itself. Edit the config.yml template in etc. Be sure to provide the read and write access to all the 4 directories.
+Also make sure, the input files should be somewhere in shared data folder for all the spark workers to read
 
 # Example Usage
+```
 from sparkles.modules.utils.runner import SparkRunner
-sr = SparkRunner('/shared_data/etc/config.yml')
-sr.import_dataset('/shared_data/files/FI4000047485_EUR.h5','some','some','swift://containerFiles.SparkTest')
-sr.import_analysis('/shared_data/mods/','Liq', 'some','some', '/shared_data/github/spark-analysis/sparkles/modules/liq_curve_parquet.py','some','some','some')
+sr = SparkRunner('path/to/config.yml')
+sr.import_dataset(inputs='/path/to/filename.extension',userdatadir='swift://containerFiles.SparkTest',description='some',details='some')
+sr.import_analysis(name='modulename', description='description', details='details', '/path/to/module.py', params='params that are used in module', inputs='type of input it reads', outputs='kind of output it generates')
 
 params = {'tablename': 'ORDERS', 'start_time': 1349159961141, 'end_time': 1349160643981, 'interval': 60}
-inputs = ['FI4000047485_EUR']
-sr.run_analysis(modulename='Liq', params=params, inputs=inputs)
+inputs = ['filename']
+sr.run_analysis(modulename='modulename', params=params, inputs=inputs)
+```
+If you need to generate a feature set out of the modules
+```
+features = {'userdatadir': 'swift://containerFeatures.SparkTest', 'description': 'event counting', 'details': 'something', 'modulename': 'modulename', 'featureset_name': 'featuresetname'}
+params = {'tablename': 'ORDERS', 'start_time': 1349159961141, 'end_time': 1349160643981, 'interval': 60}
+inputs = ['filename']
 
-
-# Run dev scripts like
-python -m bin.sparkles --config-file <e.g. etc/config.yml> [run, list, ...]
-
+sr.run_analysis(modulename='modulename', params=params, inputs=inputs, features=features)
+```

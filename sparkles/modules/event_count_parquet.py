@@ -8,16 +8,8 @@ from operator import add
 from pyspark.sql import *
 import os
 import json
-from utils.helper import saveFeatures
+from sparkles.modules.utils.helper import saveFeatures
 from os.path import dirname
-
-
-def import_hdf5(x, filepath):
-
-    filepath = '//shared_data//files//' + filepath
-    with h5py.File(filepath) as f:
-        data = f[str(x)].get('ORDERS')
-        return list(data[:])
 
 
 # Hash the keys into different interval periods
@@ -36,7 +28,7 @@ def timetr(x, start_time, interval):
     return (dt, x[1])
 
 
-def saveResult(x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
     schemaString = "timestamp count"
 
@@ -49,7 +41,7 @@ def saveResult(x, sqlContext, userdatadir, featureset_name, description, details
 
     schema_rdd = StructType(fields_rdd)
     dfRdd = sqlContext.createDataFrame(x, schema_rdd)
-    saveFeatures(dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
+    saveFeatures(configpath, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
 
 
 def main(argv):
@@ -59,18 +51,19 @@ def main(argv):
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 
-    helperpath = dirname(os.path.abspath(__file__))
+    helperpath = str(argv[1])
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
-    params = json.loads(str(argv[1]))
-    inputs = json.loads(str(argv[2]))
-    features = json.loads(str(argv[3]))
+    params = json.loads(str(argv[2]))
+    inputs = json.loads(str(argv[3]))
+    features = json.loads(str(argv[4]))
 
     userdatadir = str(features['userdatadir'])
     description = str(features['description'])
     details = str(features['details'])
     featureset_name = str(features['featureset_name'])
     modulename = str(features['modulename'])
+    configpath = str(features['configpath'])
 
     tableindex = {"ORDERS": 3, "CANCELS": 4}
     tablename = str(params['tablename'])
@@ -110,7 +103,7 @@ def main(argv):
 
     parent_datasets = []
     parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
-    saveResult(rdd1, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
+    saveResult(configpath, rdd1, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
 
     d = rdd1.collect()
 

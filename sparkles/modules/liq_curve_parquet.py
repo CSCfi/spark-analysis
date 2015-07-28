@@ -7,7 +7,7 @@ from operator import add
 from pyspark.sql import *
 import os
 import json
-
+from sparkles.modules.utils.helper import saveFeatures
 
 # Hash the keys into different time interval periods and prices
 def keymod(x, start_time, interval):
@@ -44,15 +44,16 @@ def flatten_lists(x):
 
 def main(argv):
     conf = SparkConf()
-    # conf.setMaster("spark://nandan-spark-cluster-fe:6066")
-    # conf.setMaster("local")
     conf.setAppName("Liq Cost Parquet")
     conf.set("spark.executor.memory", "5g")
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 
-    params = json.loads(str(argv[1]))
-    inputs = json.loads(str(argv[2]))
+    helperpath = str(argv[1])
+    sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
+
+    params = json.loads(str(argv[2]))
+    inputs = json.loads(str(argv[3]))
 
     tableindex = {"ORDERS": 3, "CANCELS": 4}
     tablename = str(params['tablename'])
@@ -69,11 +70,8 @@ def main(argv):
 
     filepath = str(inputs[0])  # Provide the complete path
     filename = os.path.basename(os.path.abspath(filepath))
-    print(filepath)
     tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
 
-    # filepath = "file:///shared_data//paths//" + filepath
-    print(tablepath)
     sqlContext = SQLContext(sc)
     rdd = sqlContext.parquetFile(tablepath)
 

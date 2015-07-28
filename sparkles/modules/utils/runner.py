@@ -18,14 +18,13 @@ class SparkRunner(object):
     def __init__(self, configpath=None):
 
         config = None
-        if(configpath is None):
-            configpath = '/shared_data/etc/config.yml'
         with open(configpath, 'r') as config_file:
             config = yaml.load(config_file)
 
-        print(config)
-        self.session = config_to_db_session(config, Base)
+        dburi = config['DATABASE_URI']
+        self.session = config_to_db_session(dburi, Base)
         self.config = config
+        self.configpath = configpath
 
     def list_modules(self):
 
@@ -44,18 +43,9 @@ class SparkRunner(object):
                 print(dataset.name + '|Description: ' + dataset.description + '|Details: ' + dataset.details + '|Module used: ' + dataset.module.name + '|Parameters used: ' + dataset.module_parameters + '|Parents: ' + json.dumps(list(map((lambda x: x.name), dataset.parents))))
             print('****************************')
 
-    def import_analysis(self, destination, name, description, details, filepath, params, inputs, outputs):
+    def import_analysis(self, name='', description='', details='', filepath='', params='', inputs='', outputs=''):
 
-        src = filepath
-        dst = destination
-        if(src.endswith('/')):
-            src = src[:-1]
-        if(not dst.endswith('/')):
-            dst = dst + '/'
-
-        filename = os.path.basename(src)
-        dst = dst + filename
-        # shutil.copy(src, dst)
+        filename = os.path.basename(filepath)
         created = datetime.now()
         user = getpass.getuser()
 
@@ -85,7 +75,7 @@ class SparkRunner(object):
         else:
             print("Analysis " + name + " already exists")
 
-    def run_analysis(self, modulename=None, params=None, inputs=None, features=None):
+    def run_analysis(self, modulename='', params=None, inputs=None, features=None):
 
         if(modulename is None or params is None or inputs is None):
             print('Modulename, params and inputs are mandatory')
@@ -99,7 +89,7 @@ class SparkRunner(object):
             options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
             swiftService = SwiftService(options=options)
 
-            out_file = '/shared_data/mods/' + analysisMod.filepath
+            out_file = self.config['MODULE_LOCAL_STORAGE'] + analysisMod.filepath
             localoptions = {'out_file': out_file}
             objects = []
             objects.append(analysisMod.filepath)
@@ -115,19 +105,22 @@ class SparkRunner(object):
 
             filepaths = json.dumps(filepathsarr)
             params = json.dumps(params)
-            features = json.dumps(features)
 
+            helperpath = dirname(dirname(os.path.abspath(__file__)))
             if(features is None):
-                call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], params, filepaths])
+                call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths])
             else:
-                call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], params, filepaths, features])
+                features['configpath'] = self.configpath
+                features = json.dumps(features)
+                call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths, features])
 
-    def import_dataset(self, inputs, description, details, userdatadir):
+    def import_dataset(self, inputs='', description='', details='', userdatadir=''):
 
         # am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
         #    params(name="dataimport").first()
         path = dirname(dirname(os.path.abspath(__file__)))
-        call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.config['CLUSTER_URL'], inputs, description, details, userdatadir])
+        configpath = self.configpath
+        call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.config['CLUSTER_URL'], inputs, description, details, userdatadir, configpath])
 
     def create_dataset(self, params):
 
@@ -181,7 +174,6 @@ class SparkRunner(object):
             checkDataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
                 params(name=params['name']).first()
 
-            print('Features ' + params['name'])
             if(checkDataset is None):
                 dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id)
                 self.session.add(dataset)
@@ -190,7 +182,7 @@ class SparkRunner(object):
                 options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
                 swiftService = SwiftService(options=options)
                 objects = []
-                objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='metadata'))
+                objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='sqlite.db'))
                 swiftUpload = swiftService.upload(container='containerModules', objects=objects)
                 for uploaded in swiftUpload:
                     print("Metadata changed and uploaded")

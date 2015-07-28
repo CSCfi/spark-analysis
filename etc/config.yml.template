@@ -1,5 +1,6 @@
 DATABASE_URI: 'sqlite:////shared_data/etc/sqlite.db'
 DB_LOCATION: '/shared_data/etc/sqlite.db'
+MODULE_LOCAL_STORAGE: '/shared_data/mods/'
 CLUSTER_URL: 'spark://mycluster-fe:7077'
 SWIFT_AUTH_URL: 'https://openstack.example.org:5001/v2.0'
 SWIFT_USERNAME: ''

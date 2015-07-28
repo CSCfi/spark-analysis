@@ -1,5 +1,4 @@
 from pyspark.sql import *
-# from hdf5_map import date_query, import_hdf5
 import h5py
 from pyspark import SparkConf, SparkContext
 from datetime import datetime, date, timedelta
@@ -22,7 +21,7 @@ def add_all_dates(originalpath):
     return hfile
 
 
-def sql(orders, sqlContext, userdatadir, originalpath, description, details):
+def orders_sql(configpath, orders, sqlContext, userdatadir, originalpath, description, details):
 
     schemaString_orders = "id ref ob_id created destroyed side price quantity is_round past_id new_id p_id"
 
@@ -45,11 +44,10 @@ def sql(orders, sqlContext, userdatadir, originalpath, description, details):
     # for (id, price, side) in results.collect():
     #    print(price)
 
-    # schemaOrders.saveAsParquetFile("files/orders_name.parquet")
-    saveDataset(schemaOrders, userdatadir, "orders", originalpath, description, details)
+    saveDataset(configpath, schemaOrders, userdatadir, "orders", originalpath, description, details)
 
 
-def cancels_sql(cancels, sqlContext, userdatadir, originalpath, description, details):
+def cancels_sql(configpath, cancels, sqlContext, userdatadir, originalpath, description, details):
 
     schemaString_cancels = "id past_id new_id ob_id timestamp side price quantity"
     fields_cancels = []
@@ -62,10 +60,10 @@ def cancels_sql(cancels, sqlContext, userdatadir, originalpath, description, det
     schema_cancels = StructType(fields_cancels)
     schemaCancels = sqlContext.createDataFrame(cancels, schema_cancels)
     # schemaCancels.saveAsParquetFile("files/cancels_name.parquet")
-    saveDataset(schemaCancels, userdatadir, "cancels", originalpath, description, details)
+    saveDataset(configpath, schemaCancels, userdatadir, "cancels", originalpath, description, details)
 
 
-def trades_sql(trades, sqlContext, userdatadir, originalpath, description, details):
+def trades_sql(configpath, trades, sqlContext, userdatadir, originalpath, description, details):
 
     schemaString_trades = "id ref o_id ob_id timestamp side quantity price p_id cp_id"
     fields_trades = []
@@ -78,7 +76,7 @@ def trades_sql(trades, sqlContext, userdatadir, originalpath, description, detai
     schema_trades = StructType(fields_trades)
     schemaTrades = sqlContext.createDataFrame(trades, schema_trades)
     # schemaTrades.saveAsParquetFile("files/trades_name.parquet")
-    saveDataset(schemaTrades, userdatadir, "trades", originalpath, description, details)
+    saveDataset(configpath, schemaTrades, userdatadir, "trades", originalpath, description, details)
 
 
 def import_hdf5(x, originalpath, table):
@@ -104,19 +102,17 @@ def main(argv):
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 
-    d = dirname(dirname(os.path.abspath(__file__)))
-    print(d)
-
     helperpath = dirname(os.path.abspath(__file__))
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
     originalpaths = str(argv[0])
-    originalpaths = originalpaths.split(',')
+    originalpaths = originalpaths.split('&')
 
     description = str(argv[1])
     details = str(argv[2])
 
     userdatadir = str(argv[3])
+    configpath = str(argv[4])
 
     for originalpath in originalpaths:
         hfile = add_all_dates(originalpath)
@@ -140,9 +136,9 @@ def main(argv):
         # print(d)
 
         sqlContext = SQLContext(sc)
-        sql(rdd1, sqlContext, userdatadir, originalpath, description, details)
-        cancels_sql(rdd2, sqlContext, userdatadir, originalpath, description, details)
-        trades_sql(rdd3, sqlContext, userdatadir, originalpath, description, details)
+        orders_sql(configpath, rdd1, sqlContext, userdatadir, originalpath, description, details)
+        cancels_sql(configpath, rdd2, sqlContext, userdatadir, originalpath, description, details)
+        trades_sql(configpath, rdd3, sqlContext, userdatadir, originalpath, description, details)
         os.unlink(hfile.name)
 
 

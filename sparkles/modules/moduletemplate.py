@@ -7,7 +7,7 @@ from operator import add
 from pyspark.sql import *
 import os
 import json
-from utils.helper import saveFeatures  # If you need to save result as a feature set
+from sparkles.modules.utils.helper import saveFeatures  # If you need to save result as a feature set
 from os.path import dirname
 
 
@@ -17,7 +17,7 @@ from os.path import dirname
 #    return (dt, x)
 
 # This function is used only when you want to save your results as a feature set
-def saveResult(x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
     schemaString = "field1 field2"
 
@@ -30,7 +30,7 @@ def saveResult(x, sqlContext, userdatadir, featureset_name, description, details
 
     schema_rdd = StructType(fields_rdd)
     dfRdd = sqlContext.createDataFrame(x, schema_rdd)
-    saveFeatures(dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
+    saveFeatures(configpath, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
 
 
 # This is the function where you will write your module with logic and implementation
@@ -67,12 +67,14 @@ def your_module_implementation(sc, params=None, inputs=None, features=None):
     # featureset_name = str(features['featureset_name'])
     # modulename = str(features['modulename'])
 
+    # configpath = str(features['configpath'])  # This is automatically supplied using config.yml
+
     # For saving the results to a parquet file
     # Convert the RDD to a dataframe first by defining the schema
 
     # parent_datasets = []
     # parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
-    # saveResult(rdd1, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
+    # saveResult(configpath, rdd1, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
 
     sc.stop()
 
@@ -86,12 +88,13 @@ def main(args):
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)  # Spark Context variable that will be used for all operations running on the cluster
 
-    helperpath = dirname(os.path.abspath(__file__))
+    helperpath = str(argv[1])  # This is passed by default
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
+
     # Create a dict and pass it in your_module_implementation
-    params = json.loads(str(argv[1]))
-    inputs = json.loads(str(argv[2]))
-    # features = json.loads(str(argv[3]))  # Only used when you want to create a feature set
+    params = json.loads(str(argv[2]))
+    inputs = json.loads(str(argv[3]))
+    # features = json.loads(str(argv[4]))  # Only used when you want to create a feature set
 
     your_module_implementation(sc, params=params, inputs=inputs, features=features)
 
