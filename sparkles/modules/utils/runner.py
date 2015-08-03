@@ -21,6 +21,18 @@ class SparkRunner(object):
         with open(configpath, 'r') as config_file:
             config = yaml.load(config_file)
 
+            # Download the metadata from swift first
+            options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
+            swiftService = SwiftService(options=options)
+
+            out_file = config['DB_LOCATION']
+            localoptions = {'out_file': out_file}
+            objects = []
+            objects.append('sqlite.db')
+            swiftDownload = swiftService.download(container='containerModules', objects=objects, options=localoptions)
+            for downloaded in swiftDownload:
+                print(downloaded)
+
         dburi = config['DATABASE_URI']
         self.session = config_to_db_session(dburi, Base)
         self.config = config

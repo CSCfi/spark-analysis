@@ -179,7 +179,6 @@ def create_featureset(sessionconfig, params):
 def create_relation(sessionconfig, featset, parents):
 
     session = sessionconfig[0]
-    
     featureset = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
         params(name=featset).first()
     parents = json.loads(parents)
