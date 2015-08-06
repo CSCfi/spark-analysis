@@ -21,6 +21,18 @@ class SparkRunner(object):
         with open(configpath, 'r') as config_file:
             config = yaml.load(config_file)
 
+            # Download the metadata from swift first
+            options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
+            swiftService = SwiftService(options=options)
+
+            out_file = config['DB_LOCATION']
+            localoptions = {'out_file': out_file}
+            objects = []
+            objects.append('sqlite.db')
+            swiftDownload = swiftService.download(container='containerModules', objects=objects, options=localoptions)
+            for downloaded in swiftDownload:
+                print(downloaded)
+
         dburi = config['DATABASE_URI']
         self.session = config_to_db_session(dburi, Base)
         self.config = config
@@ -28,13 +40,17 @@ class SparkRunner(object):
 
     def list_modules(self):
 
-        print('List of available modules')
+        print('List of available modules:')
+        print('--------------------------')
+
         analysismodules = self.session.query(Analysis).all()
         for amodule in analysismodules:
             print('Name: ' + amodule.name + '|Description: ' + amodule.description + '|Details: ' + amodule.details)
 
     def list_datasets(self):
-        print('List of available datasets')
+        print('List of available datasets:')
+        print('---------------------------')
+
         datasets = self.session.query(Dataset).all()
         for dataset in datasets:
             if(dataset.module is None):
@@ -121,72 +137,3 @@ class SparkRunner(object):
         path = dirname(dirname(os.path.abspath(__file__)))
         configpath = self.configpath
         call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.config['CLUSTER_URL'], inputs, description, details, userdatadir, configpath])
-
-    def create_dataset(self, params):
-
-        checkDataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-            params(name=params['name']).first()
-
-        if(checkDataset is None):
-
-            dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
-            self.session.add(dataset)
-            self.session.commit()
-
-            options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
-            swiftService = SwiftService(options=options)
-            objects = []
-            objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='sqlite.db'))
-
-            swiftUpload = swiftService.upload(container='containerModules', objects=objects)
-            for uploaded in swiftUpload:
-                print("Metadata changed and uploaded")
-
-        else:
-            raise ValueError("The dataset with name " + params['name'] + " already exists")
-
-    def create_relation(self, featset, parents):
-
-        featureset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-            params(name=featset).first()
-        print(featset)
-        print(featureset)
-        parents = json.loads(parents)
-        print(parents)
-        for parent in parents:
-            dataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-                params(name=parent).first()
-            print(dataset)
-            f = fs_to_ds.insert().values(left_fs_id=featureset.id, right_ds_id=dataset.id)
-            self.session.execute(f)
-
-        self.session.commit()
-
-    def create_featureset(self, params):
-
-        modulename = params['modulename']
-        analysisMod = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
-            params(name=modulename).first()
-
-        if(analysisMod is not None):  # Check if the module exists
-
-            module_id = analysisMod.id
-            checkDataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-                params(name=params['name']).first()
-
-            if(checkDataset is None):
-                dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id)
-                self.session.add(dataset)
-                self.session.commit()
-
-                options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
-                swiftService = SwiftService(options=options)
-                objects = []
-                objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='sqlite.db'))
-                swiftUpload = swiftService.upload(container='containerModules', objects=objects)
-                for uploaded in swiftUpload:
-                    print("Metadata changed and uploaded")
-            else:
-                raise ValueError('The feature set with the name ' + params['name'] + ' already exists')
-        else:
-            raise ValueError('No Such Module')
