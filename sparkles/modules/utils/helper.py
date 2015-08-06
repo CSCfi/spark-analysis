@@ -152,7 +152,7 @@ def create_featureset(sessionconfig, params):
     analysisMod = session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
         params(name=modulename).first()
 
-    if(not analysisMod):  # Check if the module exists
+    if(analysisMod):  # Check if the module exists
 
         module_id = analysisMod.id
         checkDataset = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
