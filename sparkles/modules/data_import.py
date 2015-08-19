@@ -8,6 +8,7 @@ import os
 from os.path import dirname
 from tempfile import NamedTemporaryFile
 from utils.helper import saveDataset   # If you added a file in sc in above step then import it for usage
+import json
 
 
 def add_all_dates(originalpath):
@@ -105,9 +106,7 @@ def main(argv):
     helperpath = dirname(os.path.abspath(__file__))
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
-    originalpaths = str(argv[0])
-    originalpaths = originalpaths.split('&')
-
+    originalpaths = json.loads(str(argv[0]))
     description = str(argv[1])
     details = str(argv[2])
 

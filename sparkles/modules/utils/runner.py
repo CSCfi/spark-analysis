@@ -1,15 +1,13 @@
 from sqlalchemy import text
-from models import Base, config_to_db_session, fs_to_ds, Dataset, Analysis
+from models import Base, config_to_db_session, Dataset, Analysis
 from datetime import datetime
 import getpass
-import re
+# import re
 from subprocess import call
 import yaml
 import os
 from os.path import dirname
-import shutil
-import errno
-from swiftclient.service import *
+from swiftclient.service import SwiftService, SwiftUploadObject
 import json
 
 
@@ -38,20 +36,20 @@ class SparkRunner(object):
         self.config = config
         self.configpath = configpath
 
-    def list_modules(self):
+    def list_modules(self, prefix=''):
 
         print('List of available modules:')
         print('--------------------------')
 
-        analysismodules = self.session.query(Analysis).all()
-        for amodule in analysismodules:
+        analysisModules = self.session.query(Analysis).filter(Analysis.name.like('%' + prefix + '%')).all()
+        for amodule in analysisModules:
             print('Name: ' + amodule.name + '|Description: ' + amodule.description + '|Details: ' + amodule.details)
 
-    def list_datasets(self):
+    def list_datasets(self, prefix=''):
         print('List of available datasets:')
         print('---------------------------')
 
-        datasets = self.session.query(Dataset).all()
+        datasets = self.session.query(Dataset).filter(Dataset.name.like('%' + prefix + '%')).all()
         for dataset in datasets:
             if(dataset.module is None):
                 print(dataset.name + '|Description: ' + dataset.description + '|Details: ' + dataset.details)
@@ -89,51 +87,65 @@ class SparkRunner(object):
                     print('Module uploaded')
                 uploadedIndex = uploadedIndex + 1
         else:
-            print("Analysis " + name + " already exists")
+            raise RuntimeError("Analysis " + name + " already exists")
 
     def run_analysis(self, modulename='', params=None, inputs=None, features=None):
 
         if(modulename is None or params is None or inputs is None):
-            print('Modulename, params and inputs are mandatory')
+            raise RuntimeError("Modulename, params and inputs are necessary")
         else:
             analysisMod = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
                 params(name=modulename).first()
-            filepaths = ''
-            filepathsarr = []
+            if(analysisMod):
+                filepaths = ''
+                filepathsarr = []
 
-            # Download the module from swift first
-            options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
-            swiftService = SwiftService(options=options)
+                # Download the module from swift first
+                options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
+                swiftService = SwiftService(options=options)
 
-            out_file = self.config['MODULE_LOCAL_STORAGE'] + analysisMod.filepath
-            localoptions = {'out_file': out_file}
-            objects = []
-            objects.append(analysisMod.filepath)
-            swiftDownload = swiftService.download(container='containerModules', objects=objects, options=localoptions)
+                out_file = self.config['MODULE_LOCAL_STORAGE'] + analysisMod.filepath
+                localoptions = {'out_file': out_file}
+                objects = []
+                objects.append(analysisMod.filepath)
+                swiftDownload = swiftService.download(container='containerModules', objects=objects, options=localoptions)
 
-            for downloaded in swiftDownload:
-                print(downloaded)
+                for downloaded in swiftDownload:
+                    print(downloaded)
 
-            for inputfile in inputs:
-                dataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-                    params(name=inputfile).first()
-                filepathsarr.append(dataset.filepath)
+                for inputfile in inputs:
+                    dataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+                        params(name=inputfile).first()
+                    if(dataset):
+                        filepathsarr.append(dataset.filepath)
 
-            filepaths = json.dumps(filepathsarr)
-            params = json.dumps(params)
+                if(len(filepathsarr) <= 0):
+                    raise RuntimeError("No datasets found")
 
-            helperpath = dirname(dirname(os.path.abspath(__file__)))
-            if(features is None):
-                call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths])
+                filepaths = json.dumps(filepathsarr)
+                params = json.dumps(params)
+
+                helperpath = dirname(dirname(os.path.abspath(__file__)))
+                if(features is None):
+                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths])
+                else:
+                    features['configpath'] = self.configpath
+                    features = json.dumps(features)
+                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths, features])
             else:
-                features['configpath'] = self.configpath
-                features = json.dumps(features)
-                call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths, features])
+                raise RuntimeError("Analysis module not found")
 
-    def import_dataset(self, inputs='', description='', details='', userdatadir=''):
+    def import_dataset(self, inputfiles=[], description='', details='', userdatadir=''):
 
-        # am = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
-        #    params(name="dataimport").first()
-        path = dirname(dirname(os.path.abspath(__file__)))
-        configpath = self.configpath
-        call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.config['CLUSTER_URL'], inputs, description, details, userdatadir, configpath])
+        if(inputfiles and len(inputfiles) > 0):
+
+            if(not userdatadir and userdatadir == ''):
+                raise RuntimeError("User data directory is required")
+
+            path = dirname(dirname(os.path.abspath(__file__)))
+            configpath = self.configpath
+            originalpaths = json.dumps(inputfiles)
+            call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.config['CLUSTER_URL'], originalpaths, description, details, userdatadir, configpath])
+
+        else:
+            raise RuntimeError("Please ensure inputfiles is not None or empty")
