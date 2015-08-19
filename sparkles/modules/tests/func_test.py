@@ -1,7 +1,7 @@
 from mock import Mock
 from sqlalchemy import text
 from sparkles.modules.utils.models import Base, Dataset, Analysis, config_to_db_session
-from side_effects import mod_se, ds_se, call_se, list_ds_se, list_mod_se
+from sparkles.modules.tests.side_effects import mod_se, ds_se, call_se, list_ds_se, list_mod_se
 from swiftclient.service import SwiftService, SwiftUploadObject
 import subprocess
 import json
