@@ -51,8 +51,6 @@ class Functions_Test(object):
         if(checkMod is None):
 
             analysisMod = Mock(spec=Analysis(name=name, filepath=filename, description=description, details=details, created=created, user=user, parameters=params, inputs=inputs, outputs=outputs))
-            session.add(analysisMod)
-            session.commit()
 
             options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
             swiftService = Mock(spec=SwiftService(options=options))
@@ -64,6 +62,8 @@ class Functions_Test(object):
             for uploaded in swiftUpload:
                 print(uploaded)
 
+            self.session.add(analysisMod)
+            self.session.commit()
             return "import_success"
 
         else:
@@ -140,7 +140,7 @@ class Functions_Test(object):
         else:
             raise RuntimeError("Please ensure inputs is not None or empty")
 
-# f = Functions_Test()
+f = Functions_Test()
 # print(f.list_modules('Ev'))
 # print(f.list_datasets())
 # inputfiles = ['/path/to/dataset.h5', '/path/to/anotherdataset.h5']
@@ -148,4 +148,4 @@ class Functions_Test(object):
 # f.mock_run_analysis(modulename='existing', inputs=inputs, params={})
 # f.mock_run_analysis(modulename='existing', inputs=inputs, params={}, features={})
 
-# f.mock_import_analysis(name='existing_1module', filepath='etc')
+f.mock_import_analysis(name='existing_1module', filepath='etc')
