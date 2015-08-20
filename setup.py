@@ -47,6 +47,7 @@ setup(
         'Programming Language :: Python :: 2.7',
     ],
 
+
     # What does your project relate to?
     keywords='spark bigdata cloud analysis',
 
@@ -85,9 +86,9 @@ setup(
     # To provide executable scripts, use entry points in preference to the
     # "scripts" keyword. Entry points provide cross-platform support and allow
     # pip to create the appropriate form of executable for the target platform.
-    # entry_points={
-    #    'console_scripts': [
-    #        'sample=sample:main',
-    #    ],
-    # },
+    entry_points={
+        'console_scripts': [
+            'sparkles=sparkles.sparkles_shell:main',
+        ],
+     },
 )
