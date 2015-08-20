@@ -13,7 +13,7 @@ import json
 
 def add_all_dates(originalpath):
 
-    hfile = NamedTemporaryFile(delete=False, dir='/shared_data/tmp')
+    hfile = NamedTemporaryFile(delete=False, dir='/shared_data/sparkles/tmp')
     with h5py.File(originalpath) as curr_file:
             filekeys = curr_file.keys()
             for k in filekeys:
