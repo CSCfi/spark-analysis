@@ -1,5 +1,6 @@
 from mock import Mock
 from sqlalchemy import text
+import sparkles.modules.utils.models as SparklesModels
 from sparkles.modules.utils.models import Base, Dataset, Analysis, config_to_db_session
 from sparkles.modules.tests.side_effects import mod_se, ds_se, call_se, list_ds_se, list_mod_se
 from swiftclient.service import SwiftService, SwiftUploadObject
@@ -13,7 +14,8 @@ class Functions_Test(object):
 
         self.config = {'DB_LOCATION': '', 'CLUSTER_URL': '', 'MODULE_LOCAL_STORAGE': '', 'SWIFT_AUTH_URL': '', 'SWIFT_USERNAME': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_ID': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_NAME': ''}
         self.subprocessMock = Mock(spec=subprocess)
-        self.session = Mock(spec=config_to_db_session('sqlite:////shared_data/sparkles/etc/sqlite.db', Base))
+        sparklesModels = Mock(spec=SparklesModels)
+        self.session = sparklesModels.config_to_db_session('dbUri', Base)
 
     def list_modules(self, prefix=''):
 
@@ -38,14 +40,11 @@ class Functions_Test(object):
 
     def mock_import_analysis(self, name='', description='', details='', filepath='', params='', inputs='', outputs=''):
 
-        config = {'DB_LOCATION': '', 'SWIFT_AUTH_URL': '', 'SWIFT_USERNAME': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_ID': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_NAME': ''}
-
         filename = filepath
         created = 'mm-dd-yyyy 00:00:00.000'
         user = 'root'
 
-        session = Mock(spec=config_to_db_session('sqlite:////shared_data/sparkles/etc/sqlite.db', Base))
-        sessionQuery = session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
+        sessionQuery = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
             params(name=name).first().side_effect = mod_se
 
         checkMod = sessionQuery(name=name)
@@ -55,10 +54,10 @@ class Functions_Test(object):
             session.add(analysisMod)
             session.commit()
 
-            options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
+            options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
             swiftService = Mock(spec=SwiftService(options=options))
             objects = []
-            objects.append(SwiftUploadObject(config['DB_LOCATION'], object_name='sqlite.db'))
+            objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='sqlite.db'))
             objects.append(SwiftUploadObject(filepath, object_name=filename))
 
             swiftUpload = swiftService.upload(container='containerModules', objects=objects).return_value = ('Metadata', 'Module')
@@ -72,13 +71,10 @@ class Functions_Test(object):
 
     def mock_run_analysis(self, modulename='', params=None, inputs=None, features=None):
 
-        config = {'DB_LOCATION': '', 'CLUSTER_URL': '', 'MODULE_LOCAL_STORAGE': '', 'SWIFT_AUTH_URL': '', 'SWIFT_USERNAME': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_ID': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_NAME': ''}
-        session = Mock(spec=config_to_db_session('sqlite:////shared_data/sparkles/etc/sqlite.db', Base))
-
         if(modulename is None or params is None or inputs is None):
             raise RuntimeError("Modulename, params and inputs are necessary")
         else:
-            sessionQuery = session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
+            sessionQuery = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
                 params(name=modulename).first().side_effect = mod_se
             analysisMod = sessionQuery(name=modulename)
 
@@ -87,11 +83,11 @@ class Functions_Test(object):
                 filepathsarr = []
 
                 # Download the module from swift first
-                options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
+                options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
 
                 swiftService = Mock(spec=SwiftService(options=options))
 
-                out_file = config['MODULE_LOCAL_STORAGE'] + analysisMod.filepath
+                out_file = self.config['MODULE_LOCAL_STORAGE'] + analysisMod.filepath
                 localoptions = {'out_file': out_file}
                 objects = []
                 objects.append(analysisMod.filepath)
@@ -101,7 +97,7 @@ class Functions_Test(object):
                     print(downloaded)
 
                 for inputfile in inputs:
-                    sessionDsQuery = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+                    sessionDsQuery = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
                         params(name=inputfile).first().side_effect = ds_se
 
                     dataset = sessionDsQuery(name=inputfile)
@@ -118,11 +114,11 @@ class Functions_Test(object):
                 subprocessMock = Mock(spec=subprocess)
                 subprocessMock.call.side_effect = call_se
                 if(features is None):
-                    s = subprocessMock.call(["/opt/spark/bin/pyspark", out_file, "--master", config['CLUSTER_URL'], helperpath, params, filepaths])
+                    s = subprocessMock.call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths])
                 else:
                     features['configpath'] = 'configpath'
                     features = json.dumps(features)
-                    s = subprocessMock.call(["/opt/spark/bin/pyspark", out_file, "--master", config['CLUSTER_URL'], helperpath, params, filepaths, features])
+                    s = subprocessMock.call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths, features])
                 return s
 
             else:
@@ -149,7 +145,7 @@ class Functions_Test(object):
 # print(f.list_datasets())
 # inputfiles = ['/path/to/dataset.h5', '/path/to/anotherdataset.h5']
 # f.mock_import_dataset(inputfiles=inputfiles, userdatadir='')
-# f.test_run_analysis(modulename='existing', inputs=inputs, params={})
-# f.test_run_analysis(modulename='existing', inputs=inputs, params={}, features={})
+# f.mock_run_analysis(modulename='existing', inputs=inputs, params={})
+# f.mock_run_analysis(modulename='existing', inputs=inputs, params={}, features={})
 
 # f.mock_import_analysis(name='existing_1module', filepath='etc')
