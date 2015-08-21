@@ -9,6 +9,7 @@ import os
 from os.path import dirname
 from swiftclient.service import SwiftService, SwiftUploadObject
 import json
+import warnings
 
 
 class SparkRunner(object):
@@ -23,13 +24,20 @@ class SparkRunner(object):
             options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
             swiftService = SwiftService(options=options)
 
-            out_file = config['DB_LOCATION']
+            # Create the containers which are used in this application for Object Storage
+            swiftService.post(container='containerFiles')
+            swiftService.post(container='containerFeatures')
+            swiftService.post(container='containerModules')
+
+            out_file = config['DB_LOCATION']  # Where to store the metadata on local system
             localoptions = {'out_file': out_file}
             objects = []
-            objects.append('sqlite.db')
+            objects.append('sqlite.db')  # Name of the metadata file
             swiftDownload = swiftService.download(container='containerModules', objects=objects, options=localoptions)
             for downloaded in swiftDownload:
-                print(downloaded)
+                if ('error' in downloaded.keys()):
+                    print(downloaded['error'])
+                    warnings.warn('The metadata was not found on backend, creating new! If this is not your first time usage after installing the library, please consult with the support team before proceeding!', RuntimeWarning)
 
         dburi = config['DATABASE_URI']
         self.session = config_to_db_session(dburi, Base)
