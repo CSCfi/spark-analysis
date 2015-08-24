@@ -11,6 +11,7 @@ import errno
 from models import Base, config_to_db_session, fs_to_ds, Dataset, Analysis
 from sqlalchemy import text
 from swiftclient.service import *
+import shutil
 
 
 # Hack for using HDF5 datasets in Spark, also fetches the data from dataset using the dates provided by user
@@ -64,17 +65,14 @@ def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, des
     params['filepath'] = filedir
     params['schema'] = schema
 
+    try:
+        dataframe.saveAsParquetFile(tablepath)
+    except Exception as e:
+        raise RuntimeError(e)
+
     if(tablename == "orders"):
         sessionconfig = config_session(configpath)
         create_dataset(sessionconfig, params)
-
-    # try:
-    #    os.makedirs(filedir)
-    # except OSError as exception:
-    #    if exception.errno != errno.EEXIST:
-    #        raise
-
-    dataframe.saveAsParquetFile(tablepath)
 
 
 def saveFeatures(configpath, dataframe, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
@@ -99,10 +97,14 @@ def saveFeatures(configpath, dataframe, userdatadir, featureset_name, descriptio
     params['filepath'] = filepath
     params['schema'] = schema
 
+    try:
+        dataframe.saveAsParquetFile(filepath)
+    except Exception as e:
+        raise RuntimeError(e)
+
     sessionconfig = config_session(configpath)
     create_featureset(sessionconfig, params)
     create_relation(sessionconfig, featureset_name, parent_datasets)
-    dataframe.saveAsParquetFile(filepath)
 
 
 def config_session(configpath):
@@ -127,6 +129,8 @@ def create_dataset(sessionconfig, params):
     if(checkDataset is None):
 
         dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
+        shutil.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
+
         session.add(dataset)
         session.commit()
 
@@ -137,6 +141,9 @@ def create_dataset(sessionconfig, params):
 
         swiftUpload = swiftService.upload(container='containerModules', objects=objects)
         for uploaded in swiftUpload:
+            if("error" in uploaded.keys()):
+                shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
+                raise RuntimeError(uploaded['error'])
             print("Metadata changed and uploaded")
 
     else:
@@ -160,16 +167,11 @@ def create_featureset(sessionconfig, params):
 
         if(checkDataset is None):
             dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id)
+            shutil.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
+
             session.add(dataset)
             session.commit()
 
-            options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
-            swiftService = SwiftService(options=options)
-            objects = []
-            objects.append(SwiftUploadObject(config['DB_LOCATION'], object_name='sqlite.db'))
-            swiftUpload = swiftService.upload(container='containerModules', objects=objects)
-            for uploaded in swiftUpload:
-                print("Metadata changed , uploaded")
         else:
             raise ValueError('The feature set with the name ' + params['name'] + ' already exists')
     else:
@@ -179,6 +181,8 @@ def create_featureset(sessionconfig, params):
 def create_relation(sessionconfig, featset, parents):
 
     session = sessionconfig[0]
+    config = sessionconfig[1]
+
     featureset = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
         params(name=featset).first()
     parents = json.loads(parents)
@@ -189,3 +193,14 @@ def create_relation(sessionconfig, featset, parents):
         session.execute(f)
 
     session.commit()
+
+    options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
+    swiftService = SwiftService(options=options)
+    objects = []
+    objects.append(SwiftUploadObject(config['DB_LOCATION'], object_name='sqlite.db'))
+    swiftUpload = swiftService.upload(container='containerModules', objects=objects)
+    for uploaded in swiftUpload:
+        if("error" in uploaded.keys()):
+            shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
+            raise RuntimeError(uploaded['error'])
+        print("Metadata changed , uploaded")

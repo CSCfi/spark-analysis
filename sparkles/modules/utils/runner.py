@@ -10,6 +10,7 @@ from os.path import dirname
 from swiftclient.service import SwiftService, SwiftUploadObject
 import json
 import warnings
+import shutil
 
 
 class SparkRunner(object):
@@ -76,6 +77,8 @@ class SparkRunner(object):
 
         if(checkMod is None):
             analysisMod = Analysis(name=name, filepath=filename, description=description, details=details, created=created, user=user, parameters=params, inputs=inputs, outputs=outputs)
+            shutil.copyfile(self.config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
+
             self.session.add(analysisMod)
             self.session.commit()
 
@@ -87,13 +90,11 @@ class SparkRunner(object):
             objects.append(SwiftUploadObject(filepath, object_name=filename))
 
             swiftUpload = swiftService.upload(container='containerModules', objects=objects)
-            uploadedIndex = 0
             for uploaded in swiftUpload:
-                if(uploadedIndex == 1):
-                    print('Metadata changed and uploaded')
-                elif(uploadedIndex == 2):
-                    print('Module uploaded')
-                uploadedIndex = uploadedIndex + 1
+                if("error" in uploaded.keys()):
+                    shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', self.config['DB_LOCATION'])
+                    raise RuntimeError(uploaded['error'])
+                print(uploaded)
         else:
             raise RuntimeError("Analysis " + name + " already exists")
 
@@ -119,6 +120,8 @@ class SparkRunner(object):
                 swiftDownload = swiftService.download(container='containerModules', objects=objects, options=localoptions)
 
                 for downloaded in swiftDownload:
+                    if("error" in downloaded.keys()):
+                        raise RuntimeError(downloaded['error'])
                     print(downloaded)
 
                 for inputfile in inputs:
