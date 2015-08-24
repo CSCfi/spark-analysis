@@ -8,7 +8,7 @@ import subprocess
 import json
 
 
-class Functions_Test(object):
+class Runner_Test(object):
 
     def __init__(self):
 
@@ -140,12 +140,11 @@ class Functions_Test(object):
         else:
             raise RuntimeError("Please ensure inputs is not None or empty")
 
-f = Functions_Test()
+# f = Runner_Test()
 # print(f.list_modules('Ev'))
 # print(f.list_datasets())
 # inputfiles = ['/path/to/dataset.h5', '/path/to/anotherdataset.h5']
 # f.mock_import_dataset(inputfiles=inputfiles, userdatadir='')
 # f.mock_run_analysis(modulename='existing', inputs=inputs, params={})
 # f.mock_run_analysis(modulename='existing', inputs=inputs, params={}, features={})
-
-f.mock_import_analysis(name='existing_1module', filepath='etc')
+# f.mock_import_analysis(name='existing_1module', filepath='etc')
