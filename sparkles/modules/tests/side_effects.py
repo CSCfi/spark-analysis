@@ -52,18 +52,42 @@ def call_se(*args, **kwargs):
 
 
 def ds_se(*args, **kwargs):
-    if kwargs['name'] == 'dataset':
+    if kwargs['name'] in ['dataset', 'existing_dataset']:
         ds = Mock(spec=Dataset)
         ds.filepath = '/path/to/dataset'
+        ds.id = '00000abc'
         return ds
     else:
         return None
 
 
+def feat_se(*args, **kwargs):
+
+    if kwargs['name'] == 'existing_feat':
+        feat = Mock(spec=Dataset)
+        feat.id = '1234xyz'
+        return feat
+    else:
+        return None
+
+
+def relation_se(*args, **kwargs):
+
+    '''This side effect mocks the effect of a database table with a newly added featureset "feat" for use in create_relation
+    '''
+    if kwargs['name'] in ['existing_feat', 'feat']:
+        feat = Mock(spec=Dataset)
+        feat.id = '1234xyz'
+        return feat
+    else:
+        return None
+
+
 def mod_se(*args, **kwargs):
-    if kwargs['name'] == 'existing':
+    if kwargs['name'] == 'existing_module':
 
         amod = Mock(spec=Analysis)
+        amod.id = 'xyz0000abc'
         amod.filepath = '/path/to/module'
         return amod
     else:

@@ -1,5 +1,8 @@
 import unittest
 from sparkles.modules.tests.runner_test import Runner_Test
+from sparkles.modules.tests.dataframe_mock import DataframeMock
+import sparkles.modules.tests.helper_test as helper_test
+import json
 
 
 class Interface_Tests(unittest.TestCase):
@@ -43,7 +46,7 @@ class Interface_Tests(unittest.TestCase):
         self.assertEqual('import_success', runner_test.mock_import_analysis(name=modulename, description='description', details='details', filepath=filepath, params=params, inputs=inputs, outputs=outputs))
 
         # Exception Tests when module already exists in backend
-        modulename_exists = 'existing'
+        modulename_exists = 'existing_module'
         self.assertRaises(RuntimeError, lambda: runner_test.mock_import_analysis(name=modulename_exists, description='description', details='details', filepath=filepath, params=params, inputs=inputs, outputs=outputs))
 
     def test_import_datasets(self):
@@ -72,8 +75,8 @@ class Interface_Tests(unittest.TestCase):
 
         runner_test = Runner_Test()
         params = {}
-        inputs_correct = ['dataset', 'dataset']
-        modulename_exists = 'existing'  # Name of a module which exists in backend
+        inputs_correct = ['existing_dataset', 'dataset']
+        modulename_exists = 'existing_module'  # Name of a module which exists in backend
 
         # Test the Run with no featureset generation
         self.assertEqual(runner_test.mock_run_analysis(modulename=modulename_exists, params=params, inputs=inputs_correct), 'run_ok_nofeatureset')
@@ -98,3 +101,43 @@ class Interface_Tests(unittest.TestCase):
         self.assertRaises(RuntimeError, lambda: runner_test.mock_run_analysis(modulename=modulename_exists, params=params))
         self.assertRaises(RuntimeError, lambda: runner_test.mock_run_analysis(params=params, inputs=inputs_correct))
         self.assertRaises(RuntimeError, lambda: runner_test.mock_run_analysis(modulename=modulename_exists, inputs=inputs_correct))
+
+    def test_save_datasets(self):
+
+        dataframe = DataframeMock()
+
+        configpath = '/shared_data/sparkles/etc/config.yml'
+        userdatadir = 'swift://containerFiles.SparkTest'
+        originalpath = '/path/to/file.h5'
+        self.assertTrue(helper_test.saveDataset(configpath, dataframe, userdatadir, "orders", originalpath, 'description', 'details'))
+
+        # Exceptions
+        invalid_userdatadir = 'swift://wrongContainer.SparkTest'
+        self.assertRaises(RuntimeError, lambda: helper_test.saveDataset(configpath, dataframe, invalid_userdatadir, "orders", originalpath, 'description', 'details'))
+
+        invalid_originalpath = 'wrong/path/or/filename.h5'
+        self.assertRaises(RuntimeError, lambda: helper_test.saveDataset(configpath, dataframe, userdatadir, "orders", invalid_originalpath, 'description', 'details'))
+
+    def test_save_featuresets(self):
+
+        dataframe = DataframeMock()
+        configpath = '/shared_data/sparkles/etc/config.yml'
+        userdatadir = 'swift://containerFeatures.SparkTest'
+
+        featureset_name = 'feat'
+        modulename = 'existing_module'
+        module_parameters = [12345, 56789]
+        parent_datasets = ['existing_dataset']
+
+        self.assertTrue(helper_test.saveFeatures(configpath, dataframe, userdatadir, featureset_name, 'description', 'details', modulename, json.dumps(module_parameters), json.dumps(parent_datasets)))
+
+        # Exceptions
+
+        invalid_userdatadir = 'swift://wrongContainer.SparkTest'
+        self.assertRaises(RuntimeError, lambda: helper_test.saveFeatures(configpath, dataframe, invalid_userdatadir, featureset_name, 'description', 'details', modulename, json.dumps(module_parameters), json.dumps(parent_datasets)))
+
+        existing_featureset = 'existing_feat'
+        self.assertRaises(RuntimeError, lambda: helper_test.saveFeatures(configpath, dataframe, userdatadir, existing_featureset, 'description', 'details', modulename, json.dumps(module_parameters), json.dumps(parent_datasets)))
+
+        nonexisting_module = 'wrong_module'
+        self.assertRaises(RuntimeError, lambda: helper_test.saveFeatures(configpath, dataframe, userdatadir, featureset_name, 'description', 'details', nonexisting_module, json.dumps(module_parameters), json.dumps(parent_datasets)))
