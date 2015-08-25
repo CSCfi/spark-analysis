@@ -2,7 +2,6 @@ from mock import Mock, patch, mock_open
 import sparkles.modules.utils.models as SparklesModels
 from sparkles.modules.utils.models import Base, Dataset, Analysis, config_to_db_session
 from side_effects import mod_se, ds_se, feat_se, relation_se, call_se, list_ds_se, list_mod_se
-
 import h5py
 from datetime import datetime, date, timedelta
 from collections import defaultdict
@@ -16,6 +15,12 @@ from sparkles.modules.utils.models import Base, config_to_db_session, fs_to_ds, 
 from sqlalchemy import text
 from swiftclient.service import *
 import shutil
+
+from sys import version_info
+if version_info.major == 2:
+    import __builtin__ as builtins  # pylint:disable=import-error
+else:
+    import builtins  # pylint:disable=import-error
 
 
 def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, description, details):
@@ -93,9 +98,9 @@ def config_session(configpath):
 
     config = None
     yamlmock = Mock(spec=yaml)
-    with patch('__main__.open', mock_open(read_data={})) as m:
-        with open(configpath) as config_file:
-            config = yamlmock.load(config_file).return_value = {'DATABASE_URI': '', 'DB_LOCATION': '', 'CLUSTER_URL': '', 'MODULE_LOCAL_STORAGE': '', 'SWIFT_AUTH_URL': '', 'SWIFT_USERNAME': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_ID': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_NAME': ''}
+    with patch.object(builtins, 'open', mock_open(read_data={})):
+            with open(configpath) as config_file:  # file does not need to exist
+                config = yamlmock.load(config_file).return_value = {'DATABASE_URI': '', 'DB_LOCATION': '', 'CLUSTER_URL': '', 'MODULE_LOCAL_STORAGE': '', 'SWIFT_AUTH_URL': '', 'SWIFT_USERNAME': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_ID': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_NAME': ''}
 
     sparklesModels = Mock(spec=SparklesModels)
     dburi = config['DATABASE_URI']

@@ -106,7 +106,7 @@ class Interface_Tests(unittest.TestCase):
 
         dataframe = DataframeMock()
 
-        configpath = '/shared_data/sparkles/etc/config.yml'
+        configpath = '/path/to/config.yml'
         userdatadir = 'swift://containerFiles.SparkTest'
         originalpath = '/path/to/file.h5'
         self.assertTrue(helper_test.saveDataset(configpath, dataframe, userdatadir, "orders", originalpath, 'description', 'details'))
@@ -121,7 +121,7 @@ class Interface_Tests(unittest.TestCase):
     def test_save_featuresets(self):
 
         dataframe = DataframeMock()
-        configpath = '/shared_data/sparkles/etc/config.yml'
+        configpath = '/path/to/config.yml'
         userdatadir = 'swift://containerFeatures.SparkTest'
 
         featureset_name = 'feat'
