@@ -1,16 +1,13 @@
 from mock import Mock, patch, mock_open
 import sparkles.modules.utils.models as SparklesModels
 from sparkles.modules.utils.models import Base, Dataset, Analysis, config_to_db_session
-from side_effects import mod_se, ds_se, feat_se, relation_se, call_se, list_ds_se, list_mod_se
-import h5py
+from sparkles.modules.tests.side_effects import mod_se, ds_se, feat_se, relation_se, call_se, list_ds_se, list_mod_se
 from datetime import datetime, date, timedelta
 from collections import defaultdict
-import getpass
 import re
 import yaml
 import os
 from os.path import dirname
-import errno
 from sparkles.modules.utils.models import Base, config_to_db_session, fs_to_ds, Dataset, Analysis
 from sqlalchemy import text
 from swiftclient.service import *
