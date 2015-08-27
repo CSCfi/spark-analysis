@@ -47,6 +47,10 @@ class SparkRunner(object):
 
     def list_modules(self, prefix=''):
 
+        ''' Searches for the modules according to the given prefix.
+        If no prefix is given, it returns all the modules in the backend
+        '''
+
         print('List of available modules:')
         print('--------------------------')
 
@@ -55,6 +59,11 @@ class SparkRunner(object):
             print('Name: ' + amodule.name + '|Description: ' + amodule.description + '|Details: ' + amodule.details)
 
     def list_datasets(self, prefix=''):
+
+        ''' Searches for the datasets/featuresets according to the given prefix.
+        If no prefix is given, it returns all the datasets/featuresets in the backend
+        '''
+
         print('List of available datasets:')
         print('---------------------------')
 
@@ -68,6 +77,10 @@ class SparkRunner(object):
 
     def import_analysis(self, name='', description='', details='', filepath='', params='', inputs='', outputs=''):
 
+        ''' Imports the analysis module (present on the local path) written in Spark RDD language in the backend.
+        The backend is a Swift Object Store. Parameters are needed to update the metadata.
+        '''
+
         filename = os.path.basename(filepath)
         created = datetime.now()
         user = getpass.getuser()
@@ -77,7 +90,7 @@ class SparkRunner(object):
 
         if(checkMod is None):
             analysisMod = Analysis(name=name, filepath=filename, description=description, details=details, created=created, user=user, parameters=params, inputs=inputs, outputs=outputs)
-            shutil.copyfile(self.config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
+            shutil.copyfile(self.config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')  # Backup metadata
 
             self.session.add(analysisMod)
             self.session.commit()
@@ -99,6 +112,11 @@ class SparkRunner(object):
             raise RuntimeError("Analysis " + name + " already exists")
 
     def run_analysis(self, modulename='', params=None, inputs=None, features=None):
+
+        ''' Runs the given analysis module against the given input datasets and produces the output.
+        The analysis module and the datasets have to be imported first (Metadata is read)
+        The output can be printed on console or saved as a featureset (features parameter needs to be specified)
+        '''
 
         if(modulename is None or params is None or inputs is None):
             raise RuntimeError("Modulename, params and inputs are necessary")
@@ -140,13 +158,17 @@ class SparkRunner(object):
                 if(features is None):
                     call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths])
                 else:
-                    features['configpath'] = self.configpath
+                    features['configpath'] = self.configpath  # Pass the configpath as a default parameter
                     features = json.dumps(features)
                     call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths, features])
             else:
                 raise RuntimeError("Analysis module not found")
 
     def import_dataset(self, inputfiles=[], description='', details='', userdatadir=''):
+
+        ''' Imports a given dataset (on a local path) to the backend which is a Swift object store
+        Multiple files can be imported as inputfiles parameters is an array. The userdatadir is the object store container URI
+        '''
 
         if(inputfiles and len(inputfiles) > 0):
 

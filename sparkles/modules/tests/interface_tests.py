@@ -23,6 +23,7 @@ class Interface_Tests(unittest.TestCase):
         """
         runner_test = Runner_Test()
 
+        # Datasets in the backend are (for demo) AB00, CD01 and one featureset FeatSet01
         self.assertEqual('AB00', runner_test.list_datasets('AB'))  # Search by prefix
         self.assertEqual('AB00', runner_test.list_datasets('A'))  # Same result by prefix
         self.assertEqual('CD01', runner_test.list_datasets('CD'))
@@ -104,7 +105,11 @@ class Interface_Tests(unittest.TestCase):
 
     def test_save_datasets(self):
 
-        dataframe = DataframeMock()
+        """ This is to test the saving of a dataset when you run the import_datasets function of the main interface.
+        Tries to save the metadata, and uploading of Parquet file to Swift. Contains Exceptions checks too.
+        """
+
+        dataframe = DataframeMock()  # The dataframe is generated manually in the analysis modules we write. Here we are mocking it
 
         configpath = '/path/to/config.yml'
         userdatadir = 'swift://containerFiles.SparkTest'
@@ -120,6 +125,10 @@ class Interface_Tests(unittest.TestCase):
 
     def test_save_featuresets(self):
 
+        """ This is to test the saving of a featureset when you run the run_analysis function of the main interface.
+        Tries to save the metadata, and uploades the featureset Parquet file to Swift. Also creates relations between datasets.
+        """
+
         dataframe = DataframeMock()
         configpath = '/path/to/config.yml'
         userdatadir = 'swift://containerFeatures.SparkTest'
@@ -133,11 +142,14 @@ class Interface_Tests(unittest.TestCase):
 
         # Exceptions
 
+        # Error when trying to save in a wrong container
         invalid_userdatadir = 'swift://wrongContainer.SparkTest'
         self.assertRaises(RuntimeError, lambda: helper_test.saveFeatures(configpath, dataframe, invalid_userdatadir, featureset_name, 'description', 'details', modulename, json.dumps(module_parameters), json.dumps(parent_datasets)))
 
+        # Error when trying to save featureset with same name
         existing_featureset = 'existing_feat'
         self.assertRaises(RuntimeError, lambda: helper_test.saveFeatures(configpath, dataframe, userdatadir, existing_featureset, 'description', 'details', modulename, json.dumps(module_parameters), json.dumps(parent_datasets)))
 
+        # Error when trying to use a module which does not exist
         nonexisting_module = 'wrong_module'
         self.assertRaises(RuntimeError, lambda: helper_test.saveFeatures(configpath, dataframe, userdatadir, featureset_name, 'description', 'details', nonexisting_module, json.dumps(module_parameters), json.dumps(parent_datasets)))
