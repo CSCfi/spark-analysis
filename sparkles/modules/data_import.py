@@ -98,11 +98,10 @@ def to_int(x):
 def main(argv):
     conf = SparkConf()
     conf.setAppName("Data Import")
-    conf.set("spark.executor.memory", "5g")
-    # conf.set("master", "spark://nandan-spark-cluster-fe:7077")
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 
+    partitions = 12  # Default number of jobs
     helperpath = dirname(os.path.abspath(__file__))
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
@@ -118,7 +117,7 @@ def main(argv):
         # print(hfile.name)
         # print(d + '/keys.txt')
 
-        raw_file = sc.textFile('file://' + hfile.name)
+        raw_file = sc.textFile('file://' + hfile.name, partitions)
         rdd1 = raw_file.flatMap(lambda x: import_hdf5(x, originalpath, "ORDERS"))
         rdd1 = rdd1.map(lambda x: list(x))
         rdd1 = rdd1.map(to_int)

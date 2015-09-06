@@ -84,7 +84,6 @@ def main(args):
     # Configure Spark
     conf = SparkConf()
     conf.setAppName("Application name")  # Specify the application name
-    conf.set("spark.executor.memory", "5g")  # Specify the memory
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")  # Don't modify
     sc = SparkContext(conf=conf)  # Spark Context variable that will be used for all operations running on the cluster
 

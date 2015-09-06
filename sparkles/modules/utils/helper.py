@@ -10,7 +10,7 @@ from os.path import dirname
 import errno
 from models import Base, config_to_db_session, fs_to_ds, Dataset, Analysis
 from sqlalchemy import text
-from swiftclient.service import *
+from swiftclient.service import SwiftService, SwiftUploadObject
 import shutil
 
 

@@ -148,7 +148,7 @@ class SparkRunner(object):
                     if(dataset):
                         filepathsarr.append(dataset.filepath)
 
-                if(len(filepathsarr) <= 0):
+                if(not filepathsarr):
                     raise RuntimeError("No datasets found")
 
                 filepaths = json.dumps(filepathsarr)
@@ -170,10 +170,10 @@ class SparkRunner(object):
         Multiple files can be imported as inputfiles parameters is an array. The userdatadir is the object store container URI
         '''
 
-        if(inputfiles and len(inputfiles) > 0):
+        if(inputfiles):
 
-            if(not userdatadir and userdatadir == ''):
-                raise RuntimeError("User data directory is required")
+            if(not userdatadir):
+                userdatadir = 'swift://containerFiles.SparkTest'
 
             path = dirname(dirname(os.path.abspath(__file__)))
             configpath = self.configpath
