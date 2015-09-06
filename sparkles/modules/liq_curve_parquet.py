@@ -46,7 +46,6 @@ def flatten_lists(x):
 def main(argv):
     conf = SparkConf()
     conf.setAppName("Liq Cost Parquet")
-    conf.set("spark.executor.memory", "5g")
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 

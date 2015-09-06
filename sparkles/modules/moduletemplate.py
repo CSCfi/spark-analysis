@@ -42,8 +42,8 @@ def your_module_implementation(sc, params=None, inputs=None, features=None):
     # interval = float(params['interval'])
 
     filepath = str(inputs[0])  # Provide the complete path
-    filename = os.path.basename(os.path.abspath(filepath))
-    tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
+    filename = os.path.basename(os.path.abspath(filepath))  # Don't change
+    tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'  # Don't change
 
     sqlContext = SQLContext(sc)  # Create SQLContext var from SparkContext, Useful only if you are using dataframes i.e. parquet files
     rdd = sqlContext.parquetFile(tablepath)
@@ -67,7 +67,7 @@ def your_module_implementation(sc, params=None, inputs=None, features=None):
     # featureset_name = str(features['featureset_name'])
     # modulename = str(features['modulename'])
 
-    # configpath = str(features['configpath'])  # This is automatically supplied using config.yml
+    # configpath = str(features['configpath'])  # Automatically supplied, don't change anything
 
     # For saving the results to a parquet file
     # Convert the RDD to a dataframe first by defining the schema
@@ -83,9 +83,8 @@ def main(args):
 
     # Configure Spark
     conf = SparkConf()
-    conf.setAppName("Application name")
-    conf.set("spark.executor.memory", "5g")
-    conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
+    conf.setAppName("Application name")  # Specify the application name
+    conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")  # Don't modify
     sc = SparkContext(conf=conf)  # Spark Context variable that will be used for all operations running on the cluster
 
     helperpath = str(argv[1])  # This is passed by default

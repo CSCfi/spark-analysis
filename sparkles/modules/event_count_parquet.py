@@ -47,7 +47,6 @@ def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, descript
 def main(argv):
     conf = SparkConf()
     conf.setAppName("Parquet Count 60")
-    conf.set("spark.executor.memory", "5g")
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 

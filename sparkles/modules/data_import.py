@@ -8,11 +8,12 @@ import os
 from os.path import dirname
 from tempfile import NamedTemporaryFile
 from utils.helper import saveDataset   # If you added a file in sc in above step then import it for usage
+import json
 
 
 def add_all_dates(originalpath):
 
-    hfile = NamedTemporaryFile(delete=False, dir='/shared_data/tmp')
+    hfile = NamedTemporaryFile(delete=False, dir='/shared_data/sparkles/tmp')
     with h5py.File(originalpath) as curr_file:
             filekeys = curr_file.keys()
             for k in filekeys:
@@ -97,17 +98,14 @@ def to_int(x):
 def main(argv):
     conf = SparkConf()
     conf.setAppName("Data Import")
-    conf.set("spark.executor.memory", "5g")
-    # conf.set("master", "spark://nandan-spark-cluster-fe:7077")
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 
+    partitions = 12  # Default number of jobs
     helperpath = dirname(os.path.abspath(__file__))
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
-    originalpaths = str(argv[0])
-    originalpaths = originalpaths.split('&')
-
+    originalpaths = json.loads(str(argv[0]))
     description = str(argv[1])
     details = str(argv[2])
 
@@ -119,7 +117,7 @@ def main(argv):
         # print(hfile.name)
         # print(d + '/keys.txt')
 
-        raw_file = sc.textFile('file://' + hfile.name)
+        raw_file = sc.textFile('file://' + hfile.name, partitions)
         rdd1 = raw_file.flatMap(lambda x: import_hdf5(x, originalpath, "ORDERS"))
         rdd1 = rdd1.map(lambda x: list(x))
         rdd1 = rdd1.map(to_int)

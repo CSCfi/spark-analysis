@@ -1,43 +1,23 @@
-import h5py
+from mock import Mock, patch, mock_open
+import sparkles.modules.utils.models as SparklesModels
+from sparkles.modules.utils.models import Base, Dataset, Analysis, config_to_db_session
+from sparkles.modules.tests.side_effects import mod_se, ds_se, feat_se, relation_se, call_se, list_ds_se, list_mod_se
 from datetime import datetime, date, timedelta
 from collections import defaultdict
-import getpass
 import re
-from runner import SparkRunner
 import yaml
 import os
 from os.path import dirname
-import errno
-from models import Base, config_to_db_session, fs_to_ds, Dataset, Analysis
+from sparkles.modules.utils.models import Base, config_to_db_session, fs_to_ds, Dataset, Analysis
 from sqlalchemy import text
-from swiftclient.service import SwiftService, SwiftUploadObject
+from swiftclient.service import *
 import shutil
 
-
-# Hack for using HDF5 datasets in Spark, also fetches the data from dataset using the dates provided by user
-def date_query(x, start_time, end_time):
-    start = date.fromtimestamp(start_time)
-    end = date.fromtimestamp(end_time)
-
-    delta = timedelta(days=1)
-    filepath = 'filepath here' + x
-    with h5py.File(filepath) as curr_file:
-        res = []
-        while start <= end:
-            currdate = start.strftime("%Y_%m_%d")
-            if currdate in curr_file:
-                dategrp = curr_file[currdate]
-                datedata = dategrp.get('ORDERS')
-                res.append(list(datedata[:]))
-            start += delta
-        return sum(res, [])
-
-
-def import_hdf5(x, filepath, table):
-
-    with h5py.File(filepath) as f:
-        data = f[str(x)].get(table)
-        return list(data[:])
+from sys import version_info
+if version_info.major == 2:
+    import __builtin__ as builtins  # pylint:disable=import-error
+else:
+    import builtins  # pylint:disable=import-error
 
 
 def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, description, details):
@@ -47,7 +27,7 @@ def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, des
     filename = m.group(1)
 
     created = datetime.now()
-    user = getpass.getuser()
+    user = 'root'
 
     filedir = userdatadir + '/' + filename
     tablepath = filedir + '/' + filename + '_' + tablename + '.parquet'
@@ -74,13 +54,16 @@ def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, des
         sessionconfig = config_session(configpath)
         create_dataset(sessionconfig, params)
 
+    return 1
+
 
 def saveFeatures(configpath, dataframe, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
     filepath = userdatadir + '/' + featureset_name + ".parquet"
     created = datetime.now()
-    user = getpass.getuser()
+    user = 'root'
 
+    print(filepath)
     schema = str(dataframe.dtypes)
     params = defaultdict(str)
     params['name'] = featureset_name
@@ -105,16 +88,20 @@ def saveFeatures(configpath, dataframe, userdatadir, featureset_name, descriptio
     sessionconfig = config_session(configpath)
     create_featureset(sessionconfig, params)
     create_relation(sessionconfig, featureset_name, parent_datasets)
+    return 1
 
 
 def config_session(configpath):
 
     config = None
-    with open(configpath, 'r') as config_file:
-        config = yaml.load(config_file)
+    yamlmock = Mock(spec=yaml)
+    with patch.object(builtins, 'open', mock_open(read_data={})):
+            with open(configpath) as config_file:  # file does not need to exist
+                config = yamlmock.load(config_file).return_value = {'DATABASE_URI': '', 'DB_LOCATION': '', 'CLUSTER_URL': '', 'MODULE_LOCAL_STORAGE': '', 'SWIFT_AUTH_URL': '', 'SWIFT_USERNAME': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_ID': '', 'SWIFT_PASSWORD': '', 'SWIFT_TENANT_NAME': ''}
 
+    sparklesModels = Mock(spec=SparklesModels)
     dburi = config['DATABASE_URI']
-    session = config_to_db_session(dburi, Base)
+    session = sparklesModels.config_to_db_session(dburi, Base)
     return (session, config)
 
 
@@ -123,28 +110,33 @@ def create_dataset(sessionconfig, params):
     session = sessionconfig[0]
     config = sessionconfig[1]
 
-    checkDataset = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-        params(name=params['name']).first()
+    sessionDsQuery = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+        params(name=params['name']).first().side_effect = ds_se
+    checkDataset = sessionDsQuery(name=params['name'])
 
     if(checkDataset is None):
 
         dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
-        shutil.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
+
+        shutilmock = Mock(spec=shutil)
+        shutilmock.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
 
         session.add(dataset)
         session.commit()
 
         options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
-        swiftService = SwiftService(options=options)
+
+        swiftService = Mock(spec=SwiftService(options=options))
         objects = []
         objects.append(SwiftUploadObject(config['DB_LOCATION'], object_name='sqlite.db'))
 
-        swiftUpload = swiftService.upload(container='containerModules', objects=objects)
+        swiftUpload = swiftService.upload(container='containerModules', objects=objects).return_value = ({'success': 'true'}, {})
         for uploaded in swiftUpload:
             if("error" in uploaded.keys()):
-                shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
+                shutilmock = Mock(spec=shutil)
+                shutilmock.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
                 raise RuntimeError(uploaded['error'])
-            print("Metadata changed and uploaded")
+            print(uploaded)
 
     else:
         raise RuntimeError("The dataset with name " + params['name'] + " already exists")
@@ -156,18 +148,23 @@ def create_featureset(sessionconfig, params):
     config = sessionconfig[1]
 
     modulename = params['modulename']
-    analysisMod = session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
-        params(name=modulename).first()
+
+    sessionQuery = session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
+        params(name=modulename).first().side_effect = mod_se
+    analysisMod = sessionQuery(name=modulename)
 
     if(analysisMod):  # Check if the module exists
 
         module_id = analysisMod.id
-        checkDataset = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-            params(name=params['name']).first()
+        featureQuery = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+            params(name=params['name']).first().side_effect = feat_se
+        checkDataset = featureQuery(name=params['name'])
 
         if(checkDataset is None):
-            dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id)
-            shutil.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
+            dataset = Mock(spec=Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id))
+
+            shutilmock = Mock(spec=shutil)
+            shutilmock.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
 
             session.add(dataset)
             session.commit()
@@ -183,24 +180,39 @@ def create_relation(sessionconfig, featset, parents):
     session = sessionconfig[0]
     config = sessionconfig[1]
 
-    featureset = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-        params(name=featset).first()
+    featureQuery = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+        params(name=featset).first().side_effect = relation_se
+    featureset = featureQuery(name=featset)
+
     parents = json.loads(parents)
     for parent in parents:
-        dataset = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-            params(name=parent).first()
+        datasetQuery = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+            params(name=parent).first().side_effect = ds_se
+        dataset = datasetQuery(name=parent)
+
         f = fs_to_ds.insert().values(left_fs_id=featureset.id, right_ds_id=dataset.id)
         session.execute(f)
 
     session.commit()
 
     options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
-    swiftService = SwiftService(options=options)
+    swiftService = Mock(spec=SwiftService(options=options))
     objects = []
     objects.append(SwiftUploadObject(config['DB_LOCATION'], object_name='sqlite.db'))
-    swiftUpload = swiftService.upload(container='containerModules', objects=objects)
+    swiftUpload = swiftService.upload(container='containerModules', objects=objects).return_value = ({'success': 'true'}, {})
     for uploaded in swiftUpload:
         if("error" in uploaded.keys()):
-            shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
+            shutilmock.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
             raise RuntimeError(uploaded['error'])
-        print("Metadata changed , uploaded")
+        print(uploaded)
+
+# from dataframe_mock import DataframeMock
+# dataframe = DataframeMock()
+# userdatadir = 'swift://containerFiles.SparkTest'
+# saveDataset('/path/to/config.yml', dataframe, userdatadir, "orders", '/path/to/file.h5', 'description', 'details')
+# userdatadir = 'swift://containerFeatures.SparkTest'
+# featureset_name = 'feat'
+# modulename = 'existing'
+# module_parameters = {}
+# parent_datasets = ['existing_dataset']
+# saveFeatures('/path/to/config.yml', dataframe, userdatadir, featureset_name, 'description', 'details', modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
