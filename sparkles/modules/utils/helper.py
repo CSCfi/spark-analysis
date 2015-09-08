@@ -40,6 +40,33 @@ def import_hdf5(x, filepath, table):
         return list(data[:])
 
 
+def downloadDataset(filename, tablename):
+
+    tablepath = filename + '_' + tablename
+    partitions = 12
+    objects.append(filename + '/' + tablepath + '.parquet/_SUCCESS')
+    objects.append(filename + '/' + tablepath + '.parquet/_common_metadata')
+    objects.append(filename + '/' + tablepath + '.parquet/_metadata')
+
+    i = 1
+    while i <= partitions:
+        if((i / 10) > 0):
+            objects.append(filename + '/' + tablepath + '.parquet/part-r-000' + str(i) + '.parquet')
+        else:
+            objects.append(filename + '/' + tablepath + '.parquet/part-r-0000' + str(i) + '.parquet')
+        i = i + 1
+
+    objects.append(filename + '/' + tablepath + '.parquet/')
+    localoptions = {'out_file': '/shared_data/sparkles/tmp/'}
+
+    swiftOps = swiftService.download(container='containerFiles', objects=objects, options=localoptions)
+
+    for downloaded in swiftOps:
+        if("error" in downloaded.keys()):
+            raise RuntimeError(downloaded["error"])
+        print(downloaded)
+
+
 def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, description, details):
 
     p = re.compile('.+/(\w+)\.\w+')
