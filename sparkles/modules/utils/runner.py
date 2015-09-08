@@ -22,7 +22,7 @@ class SparkRunner(object):
             config = yaml.load(config_file)
 
             # Download the metadata from swift first
-            options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
+            options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
             swiftService = SwiftService(options=options)
 
             # Create the containers which are used in this application for Object Storage
@@ -96,7 +96,7 @@ class SparkRunner(object):
             self.session.commit()
 
             # Upload the metadata and module to swift
-            options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
+            options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
             swiftService = SwiftService(options=options)
             objects = []
             objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='sqlite.db'))
@@ -128,7 +128,7 @@ class SparkRunner(object):
                 filepathsarr = []
 
                 # Download the module from swift first
-                options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
+                options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
                 swiftService = SwiftService(options=options)
 
                 out_file = self.config['MODULE_LOCAL_STORAGE'] + analysisMod.filepath

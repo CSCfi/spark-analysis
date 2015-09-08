@@ -24,8 +24,8 @@ def keymod(x, start_time, interval):
 # Transform the final time
 def timetr(x, start_time, interval):
 
-    dt = datetime.fromtimestamp(start_time + x[0] * interval).strftime('%Y-%m-%d %H:%M:%S.%f')
-    return (dt, x[1])
+    dt = datetime.fromtimestamp(start_time + x[0] * interval).strftime('%Y-%m-%d %H:%M:%S.%f')  # x[0] is keyindex
+    return (dt, x[1])  # x[1] is the total aggregated count
 
 
 def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
@@ -49,6 +49,18 @@ def main(argv):
     conf.setAppName("Parquet Count 60")
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
+
+    # Swift Connection
+    hadoopConf = sc._jsc.hadoopConfiguration()
+    hadoopConf.set("fs.swift.impl", "org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem")
+    hadoopConf.set("fs.swift.service.SparkTest.auth.url", os.environ['OS_AUTH_URL'] + "/tokens")
+    hadoopConf.set("fs.swift.service.SparkTest.http.port", "8443")
+    hadoopConf.set("fs.swift.service.SparkTest.auth.endpoint.prefix", "/")
+    hadoopConf.set("fs.swift.service.SparkTest.region", os.environ['OS_REGION_NAME'])
+    hadoopConf.set("fs.swift.service.SparkTest.public", "false")
+    hadoopConf.set("fs.swift.service.SparkTest.tenant", os.environ['OS_TENANT_ID'])
+    hadoopConf.set("fs.swift.service.SparkTest.username", os.environ['OS_USERNAME'])
+    hadoopConf.set("fs.swift.service.SparkTest.password", os.environ['OS_PASSWORD'])
 
     helperpath = str(argv[1])
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules

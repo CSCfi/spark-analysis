@@ -12,6 +12,7 @@ from models import Base, config_to_db_session, fs_to_ds, Dataset, Analysis
 from sqlalchemy import text
 from swiftclient.service import SwiftService, SwiftUploadObject
 import shutil
+import json
 
 
 # Hack for using HDF5 datasets in Spark, also fetches the data from dataset using the dates provided by user
@@ -38,33 +39,6 @@ def import_hdf5(x, filepath, table):
     with h5py.File(filepath) as f:
         data = f[str(x)].get(table)
         return list(data[:])
-
-
-def downloadDataset(filename, tablename):
-
-    tablepath = filename + '_' + tablename
-    partitions = 12
-    objects.append(filename + '/' + tablepath + '.parquet/_SUCCESS')
-    objects.append(filename + '/' + tablepath + '.parquet/_common_metadata')
-    objects.append(filename + '/' + tablepath + '.parquet/_metadata')
-
-    i = 1
-    while i <= partitions:
-        if((i / 10) > 0):
-            objects.append(filename + '/' + tablepath + '.parquet/part-r-000' + str(i) + '.parquet')
-        else:
-            objects.append(filename + '/' + tablepath + '.parquet/part-r-0000' + str(i) + '.parquet')
-        i = i + 1
-
-    objects.append(filename + '/' + tablepath + '.parquet/')
-    localoptions = {'out_file': '/shared_data/sparkles/tmp/'}
-
-    swiftOps = swiftService.download(container='containerFiles', objects=objects, options=localoptions)
-
-    for downloaded in swiftOps:
-        if("error" in downloaded.keys()):
-            raise RuntimeError(downloaded["error"])
-        print(downloaded)
 
 
 def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, description, details):
@@ -161,7 +135,7 @@ def create_dataset(sessionconfig, params):
         session.add(dataset)
         session.commit()
 
-        options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
+        options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
         swiftService = SwiftService(options=options)
         objects = []
         objects.append(SwiftUploadObject(config['DB_LOCATION'], object_name='sqlite.db'))
@@ -221,7 +195,7 @@ def create_relation(sessionconfig, featset, parents):
 
     session.commit()
 
-    options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
+    options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
     swiftService = SwiftService(options=options)
     objects = []
     objects.append(SwiftUploadObject(config['DB_LOCATION'], object_name='sqlite.db'))
