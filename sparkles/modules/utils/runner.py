@@ -162,7 +162,7 @@ class SparkRunner(object):
                 else:
                     features['configpath'] = self.configpath  # Pass the configpath as a default parameter
                     features = json.dumps(features)
-                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.cluserUrl, helperpath, params, filepaths, features])
+                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.clusterUrl, helperpath, params, filepaths, features])
             else:
                 raise RuntimeError("Analysis module not found")
 
