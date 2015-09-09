@@ -13,7 +13,7 @@ from sparkles.modules.utils.helper import saveFeatures
 # Hash the keys into different time interval periods and prices
 def keymod(x, start_time, interval):
 
-    curr_t = x.created / 1000.0
+    curr_t = x.created
     curr_t = curr_t - start_time
     keyindex = int(curr_t / interval)
     return (str(keyindex) + ' ' + str(x.price), x.quantity)
@@ -22,7 +22,8 @@ def keymod(x, start_time, interval):
 # Transform the final time
 def timetr(x, start_time, interval):
 
-    dt = datetime.fromtimestamp(start_time + x[0] * interval).strftime('%Y-%m-%d %H:%M:%S.%f')
+    t = (start_time + x[0] * interval) / 1000.0
+    dt = datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S.%f')  # x[0] is keyindex
     return (dt, x[1])
 
 
@@ -67,18 +68,13 @@ def main(argv):
     params = json.loads(str(argv[2]))
     inputs = json.loads(str(argv[3]))
 
-    tableindex = {"ORDERS": 3, "CANCELS": 4}
     tablename = str(params['tablename'])
 
-    start_time = int(params['start_time']) / 1000.0
-    s = int(params['start_time'])
+    start_time = int(params['start_time'])
 
-    end_time = int(params['end_time']) / 1000.0
-    e = int(params['end_time'])
+    end_time = int(params['end_time'])
 
     interval = float(params['interval'])
-
-    index = tableindex[tablename]
 
     filepath = str(inputs[0])  # Provide the complete path
     filename = os.path.basename(os.path.abspath(filepath))
@@ -87,13 +83,10 @@ def main(argv):
     sqlContext = SQLContext(sc)
     rdd = sqlContext.parquetFile(tablepath)
 
-    # cc = rdd.count()
-    # print(cc)  # Check how much total data is there
-
     # rdd = rdd.filter(start_time <= rdd.created / 1000.0 < end_time)  # Filter data according to the start and end times
 
     rdd.registerTempTable(tablename)
-    rdd = sqlContext.sql("SELECT created, side, price, quantity FROM " + tablename + " WHERE created <" + str(e) + " AND created >=" + str(s))
+    rdd = sqlContext.sql("SELECT created, side, price, quantity FROM " + tablename + " WHERE created <" + str(end_time) + " AND created >=" + str(start_time))
 
     rdd1 = rdd.filter(rdd.side == 66)
     rdd2 = rdd.filter(rdd.side == 83)

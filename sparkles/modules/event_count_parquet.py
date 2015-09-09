@@ -15,7 +15,7 @@ from os.path import dirname
 # Hash the keys into different interval periods
 def keymod(x, start_time, interval):
 
-    curr_t = x.created / 1000.0
+    curr_t = x.created
     curr_t = curr_t - start_time
     keyindex = int(curr_t / interval)
     return (keyindex, 1)
@@ -24,7 +24,8 @@ def keymod(x, start_time, interval):
 # Transform the final time
 def timetr(x, start_time, interval):
 
-    dt = datetime.fromtimestamp(start_time + x[0] * interval).strftime('%Y-%m-%d %H:%M:%S.%f')  # x[0] is keyindex
+    t = (start_time + x[0] * interval) / 1000.0
+    dt = datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S.%f')  # x[0] is keyindex
     return (dt, x[1])  # x[1] is the total aggregated count
 
 
@@ -79,11 +80,9 @@ def main(argv):
     tableindex = {"ORDERS": 3, "CANCELS": 4}
     tablename = str(params['tablename'])
 
-    start_time = int(params['start_time']) / 1000.0
-    s = int(params['start_time'])
+    start_time = int(params['start_time'])
 
-    end_time = int(params['end_time']) / 1000.0
-    e = int(params['end_time'])
+    end_time = int(params['end_time'])
 
     interval = float(params['interval'])
 
@@ -96,17 +95,8 @@ def main(argv):
     sqlContext = SQLContext(sc)
     rdd = sqlContext.parquetFile(tablepath)
 
-    # cc = rdd.count()
-    # print(cc)  # Check how much total data is there
-
-    # rdd = rdd.filter(start_time <= rdd.created / 1000.0 < end_time)  # Filter data according to the start and end times
-
     rdd.registerTempTable(tablename)
-    rdd = sqlContext.sql("SELECT created FROM " + tablename + " WHERE created <" + str(e) + " AND created >=" + str(s))
-
-    # dd = rdd.collect()
-    # for kk in dd:
-    #    print(kk)
+    rdd = sqlContext.sql("SELECT created FROM " + tablename + " WHERE created <" + str(end_time) + " AND created >=" + str(start_time))
 
     rdd1 = rdd.map(lambda x: keymod(x, start_time, interval)).reduceByKey(add)
     rdd1 = rdd1.sortByKey()
