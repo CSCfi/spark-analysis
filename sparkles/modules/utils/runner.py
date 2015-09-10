@@ -11,6 +11,7 @@ from swiftclient.service import SwiftService, SwiftUploadObject
 import json
 import warnings
 import shutil
+import socket
 
 
 class SparkRunner(object):
@@ -22,7 +23,7 @@ class SparkRunner(object):
             config = yaml.load(config_file)
 
             # Download the metadata from swift first
-            options = {'os_auth_url': config['SWIFT_AUTH_URL'], 'os_username': config['SWIFT_USERNAME'], 'os_password': config['SWIFT_PASSWORD'], 'os_tenant_id': config['SWIFT_TENANT_ID'], 'os_tenant_name': config['SWIFT_TENANT_NAME']}
+            options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
             swiftService = SwiftService(options=options)
 
             # Create the containers which are used in this application for Object Storage
@@ -41,6 +42,7 @@ class SparkRunner(object):
                     warnings.warn('The metadata was not found on backend, creating new! If this is not your first time usage after installing the library, please consult with the support team before proceeding!', RuntimeWarning)
 
         dburi = config['DATABASE_URI']
+        self.clusterUrl = "spark://" + socket.gethostname() + ':' + config['CLUSTER_PORT']
         self.session = config_to_db_session(dburi, Base)
         self.config = config
         self.configpath = configpath
@@ -96,7 +98,7 @@ class SparkRunner(object):
             self.session.commit()
 
             # Upload the metadata and module to swift
-            options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
+            options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
             swiftService = SwiftService(options=options)
             objects = []
             objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='sqlite.db'))
@@ -128,7 +130,7 @@ class SparkRunner(object):
                 filepathsarr = []
 
                 # Download the module from swift first
-                options = {'os_auth_url': self.config['SWIFT_AUTH_URL'], 'os_username': self.config['SWIFT_USERNAME'], 'os_password': self.config['SWIFT_PASSWORD'], 'os_tenant_id': self.config['SWIFT_TENANT_ID'], 'os_tenant_name': self.config['SWIFT_TENANT_NAME']}
+                options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
                 swiftService = SwiftService(options=options)
 
                 out_file = self.config['MODULE_LOCAL_STORAGE'] + analysisMod.filepath
@@ -156,11 +158,11 @@ class SparkRunner(object):
 
                 helperpath = dirname(dirname(os.path.abspath(__file__)))
                 if(features is None):
-                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths])
+                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.clusterUrl, helperpath, params, filepaths])
                 else:
                     features['configpath'] = self.configpath  # Pass the configpath as a default parameter
                     features = json.dumps(features)
-                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.config['CLUSTER_URL'], helperpath, params, filepaths, features])
+                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.clusterUrl, helperpath, params, filepaths, features])
             else:
                 raise RuntimeError("Analysis module not found")
 
@@ -178,7 +180,7 @@ class SparkRunner(object):
             path = dirname(dirname(os.path.abspath(__file__)))
             configpath = self.configpath
             originalpaths = json.dumps(inputfiles)
-            call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.config['CLUSTER_URL'], originalpaths, description, details, userdatadir, configpath])
+            call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.clusterUrl, originalpaths, description, details, userdatadir, configpath])
 
         else:
             raise RuntimeError("Please ensure inputfiles is not None or empty")
