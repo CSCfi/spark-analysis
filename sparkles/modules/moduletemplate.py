@@ -87,13 +87,26 @@ def main(args):
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")  # Don't modify
     sc = SparkContext(conf=conf)  # Spark Context variable that will be used for all operations running on the cluster
 
-    helperpath = str(argv[1])  # This is passed by default
+    # Swift Connection
+    if(str(argv[1]) == 'swift'):
+        hadoopConf = sc._jsc.hadoopConfiguration()
+        hadoopConf.set("fs.swift.impl", "org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem")
+        hadoopConf.set("fs.swift.service.SparkTest.auth.url", os.environ['OS_AUTH_URL'] + "/tokens")
+        hadoopConf.set("fs.swift.service.SparkTest.http.port", "8443")
+        hadoopConf.set("fs.swift.service.SparkTest.auth.endpoint.prefix", "/")
+        hadoopConf.set("fs.swift.service.SparkTest.region", os.environ['OS_REGION_NAME'])
+        hadoopConf.set("fs.swift.service.SparkTest.public", "false")
+        hadoopConf.set("fs.swift.service.SparkTest.tenant", os.environ['OS_TENANT_ID'])
+        hadoopConf.set("fs.swift.service.SparkTest.username", os.environ['OS_USERNAME'])
+        hadoopConf.set("fs.swift.service.SparkTest.password", os.environ['OS_PASSWORD'])
+
+    helperpath = str(argv[2])  # This is passed by default
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
     # Create a dict and pass it in your_module_implementation
-    params = json.loads(str(argv[2]))
-    inputs = json.loads(str(argv[3]))
-    # features = json.loads(str(argv[4]))  # Only used when you want to create a feature set
+    params = json.loads(str(argv[3]))
+    inputs = json.loads(str(argv[4]))
+    # features = json.loads(str(argv[5]))  # Only used when you want to create a feature set
 
     your_module_implementation(sc, params=params, inputs=inputs, features=features)
 

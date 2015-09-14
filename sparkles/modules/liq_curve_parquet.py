@@ -51,22 +51,23 @@ def main(argv):
     sc = SparkContext(conf=conf)
 
     # Swift Connection
-    hadoopConf = sc._jsc.hadoopConfiguration()
-    hadoopConf.set("fs.swift.impl", "org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem")
-    hadoopConf.set("fs.swift.service.SparkTest.auth.url", os.environ['OS_AUTH_URL'] + "/tokens")
-    hadoopConf.set("fs.swift.service.SparkTest.http.port", "8443")
-    hadoopConf.set("fs.swift.service.SparkTest.auth.endpoint.prefix", "/")
-    hadoopConf.set("fs.swift.service.SparkTest.region", os.environ['OS_REGION_NAME'])
-    hadoopConf.set("fs.swift.service.SparkTest.public", "false")
-    hadoopConf.set("fs.swift.service.SparkTest.tenant", os.environ['OS_TENANT_ID'])
-    hadoopConf.set("fs.swift.service.SparkTest.username", os.environ['OS_USERNAME'])
-    hadoopConf.set("fs.swift.service.SparkTest.password", os.environ['OS_PASSWORD'])
+    if(str(argv[1]) == 'swift'):
+        hadoopConf = sc._jsc.hadoopConfiguration()
+        hadoopConf.set("fs.swift.impl", "org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem")
+        hadoopConf.set("fs.swift.service.SparkTest.auth.url", os.environ['OS_AUTH_URL'] + "/tokens")
+        hadoopConf.set("fs.swift.service.SparkTest.http.port", "8443")
+        hadoopConf.set("fs.swift.service.SparkTest.auth.endpoint.prefix", "/")
+        hadoopConf.set("fs.swift.service.SparkTest.region", os.environ['OS_REGION_NAME'])
+        hadoopConf.set("fs.swift.service.SparkTest.public", "false")
+        hadoopConf.set("fs.swift.service.SparkTest.tenant", os.environ['OS_TENANT_ID'])
+        hadoopConf.set("fs.swift.service.SparkTest.username", os.environ['OS_USERNAME'])
+        hadoopConf.set("fs.swift.service.SparkTest.password", os.environ['OS_PASSWORD'])
 
-    helperpath = str(argv[1])
+    helperpath = str(argv[2])
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
-    params = json.loads(str(argv[2]))
-    inputs = json.loads(str(argv[3]))
+    params = json.loads(str(argv[3]))
+    inputs = json.loads(str(argv[4]))
 
     tablename = str(params['tablename'])
 

@@ -102,27 +102,28 @@ def main(argv):
     sc = SparkContext(conf=conf)
 
     # Swift Connection
-    hadoopConf = sc._jsc.hadoopConfiguration()
-    hadoopConf.set("fs.swift.impl", "org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem")
-    hadoopConf.set("fs.swift.service.SparkTest.auth.url", os.environ['OS_AUTH_URL'] + "/tokens")
-    hadoopConf.set("fs.swift.service.SparkTest.http.port", "8443")
-    hadoopConf.set("fs.swift.service.SparkTest.auth.endpoint.prefix", "/")
-    hadoopConf.set("fs.swift.service.SparkTest.region", os.environ['OS_REGION_NAME'])
-    hadoopConf.set("fs.swift.service.SparkTest.public", "false")
-    hadoopConf.set("fs.swift.service.SparkTest.tenant", os.environ['OS_TENANT_ID'])
-    hadoopConf.set("fs.swift.service.SparkTest.username", os.environ['OS_USERNAME'])
-    hadoopConf.set("fs.swift.service.SparkTest.password", os.environ['OS_PASSWORD'])
+    if(str(argv[0]) == 'swift'):
+        hadoopConf = sc._jsc.hadoopConfiguration()
+        hadoopConf.set("fs.swift.impl", "org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem")
+        hadoopConf.set("fs.swift.service.SparkTest.auth.url", os.environ['OS_AUTH_URL'] + "/tokens")
+        hadoopConf.set("fs.swift.service.SparkTest.http.port", "8443")
+        hadoopConf.set("fs.swift.service.SparkTest.auth.endpoint.prefix", "/")
+        hadoopConf.set("fs.swift.service.SparkTest.region", os.environ['OS_REGION_NAME'])
+        hadoopConf.set("fs.swift.service.SparkTest.public", "false")
+        hadoopConf.set("fs.swift.service.SparkTest.tenant", os.environ['OS_TENANT_ID'])
+        hadoopConf.set("fs.swift.service.SparkTest.username", os.environ['OS_USERNAME'])
+        hadoopConf.set("fs.swift.service.SparkTest.password", os.environ['OS_PASSWORD'])
 
     partitions = 12  # Default number of jobs
     helperpath = dirname(os.path.abspath(__file__))
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
-    originalpaths = json.loads(str(argv[0]))
-    description = str(argv[1])
-    details = str(argv[2])
+    originalpaths = json.loads(str(argv[1]))
+    description = str(argv[2])
+    details = str(argv[3])
 
-    userdatadir = str(argv[3])
-    configpath = str(argv[4])
+    userdatadir = str(argv[4])
+    configpath = str(argv[5])
 
     for originalpath in originalpaths:
         hfile = add_all_dates(originalpath)
