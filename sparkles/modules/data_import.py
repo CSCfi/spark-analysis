@@ -9,6 +9,7 @@ from os.path import dirname
 from tempfile import NamedTemporaryFile
 from utils.helper import saveDataset   # If you added a file in sc in above step then import it for usage
 import json
+import argparse
 
 
 def add_all_dates(originalpath):
@@ -95,14 +96,24 @@ def to_int(x):
     return x
 
 
-def main(argv):
+def main():
     conf = SparkConf()
     conf.setAppName("Data Import")
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("backend", type=str)
+    parser.add_argument("originalpaths", type=str)
+    parser.add_argument("description", type=str)
+    parser.add_argument("details", type=str)
+    parser.add_argument("userdatadir", type=str)
+    parser.add_argument("configpath", type=str)
+
+    args = parser.parse_args()
+
     # Swift Connection
-    if(str(argv[0]) == 'swift'):
+    if(args.backend == 'swift'):
         hadoopConf = sc._jsc.hadoopConfiguration()
         hadoopConf.set("fs.swift.impl", "org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem")
         hadoopConf.set("fs.swift.service.SparkTest.auth.url", os.environ['OS_AUTH_URL'] + "/tokens")
@@ -118,12 +129,12 @@ def main(argv):
     helperpath = dirname(os.path.abspath(__file__))
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
-    originalpaths = json.loads(str(argv[1]))
-    description = str(argv[2])
-    details = str(argv[3])
+    originalpaths = json.loads(args.originalpaths)
+    description = args.description
+    details = args.details
 
-    userdatadir = str(argv[4])
-    configpath = str(argv[5])
+    userdatadir = args.userdatadir
+    configpath = args.configpath
 
     for originalpath in originalpaths:
         hfile = add_all_dates(originalpath)
@@ -153,4 +164,4 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:])
+    main()

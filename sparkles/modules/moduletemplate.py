@@ -9,6 +9,7 @@ import os
 import json
 from sparkles.modules.utils.helper import saveFeatures  # If you need to save result as a feature set
 from os.path import dirname
+import argparse
 
 
 # A General dummy function to be used in Map , it transforms the epoch time into human readable format
@@ -79,7 +80,7 @@ def your_module_implementation(sc, params=None, inputs=None, features=None):
     sc.stop()
 
 
-def main(args):
+def main():
 
     # Configure Spark
     conf = SparkConf()
@@ -87,8 +88,17 @@ def main(args):
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")  # Don't modify
     sc = SparkContext(conf=conf)  # Spark Context variable that will be used for all operations running on the cluster
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("backend", type=str)
+    parser.add_argument("helperpath", type=str)
+    parser.add_argument("params", type=str)
+    parser.add_argument("inputs", type=str)
+    parser.add_argument("features", type=str, nargs='?')
+
+    args = parser.parse_args()
+
     # Swift Connection
-    if(str(argv[1]) == 'swift'):
+    if(args.backend == 'swift'):
         hadoopConf = sc._jsc.hadoopConfiguration()
         hadoopConf.set("fs.swift.impl", "org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem")
         hadoopConf.set("fs.swift.service.SparkTest.auth.url", os.environ['OS_AUTH_URL'] + "/tokens")
@@ -100,16 +110,16 @@ def main(args):
         hadoopConf.set("fs.swift.service.SparkTest.username", os.environ['OS_USERNAME'])
         hadoopConf.set("fs.swift.service.SparkTest.password", os.environ['OS_PASSWORD'])
 
-    helperpath = str(argv[2])  # This is passed by default
+    helperpath = str(args.helperpath)  # This is passed by default
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
     # Create a dict and pass it in your_module_implementation
-    params = json.loads(str(argv[3]))
-    inputs = json.loads(str(argv[4]))
-    # features = json.loads(str(argv[5]))  # Only used when you want to create a feature set
+    params = json.loads(args.params)
+    inputs = json.loads(args.inputs)
+    # features = json.loads(args.features)  # Only used when you want to create a feature set
 
     your_module_implementation(sc, params=params, inputs=inputs, features=features)
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
