@@ -2,7 +2,7 @@ from sqlalchemy import text
 from models import Base, config_to_db_session, Dataset, Analysis
 from datetime import datetime
 import getpass
-# import re
+from helper import saveObjsBackend, getObjsBackend
 from subprocess import call
 import yaml
 import os
@@ -12,6 +12,8 @@ import json
 import warnings
 import shutil
 import socket
+from hdfs import InsecureClient
+import hdfs
 
 
 class SparkRunner(object):
@@ -22,30 +24,22 @@ class SparkRunner(object):
         with open(configpath, 'r') as config_file:
             config = yaml.load(config_file)
 
-            # Download the metadata from swift first
-            options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
-            swiftService = SwiftService(options=options)
+        self.backend = config['BACKEND']  # Choose the backend from hdfs or swift
+        out_file = config['DB_LOCATION']  # Where to store the metadata on local system
+        objs = []
+        if(self.backend == 'hdfs'):
+            objs.append(('/modules/sqlite.db', out_file))
+        elif(self.backend == 'swift'):
+            objs.append('sqlite.db', out_file)
 
-            # Create the containers which are used in this application for Object Storage
-            swiftService.post(container='containerFiles')
-            swiftService.post(container='containerFeatures')
-            swiftService.post(container='containerModules')
-
-            out_file = config['DB_LOCATION']  # Where to store the metadata on local system
-            localoptions = {'out_file': out_file}
-            objects = []
-            objects.append('sqlite.db')  # Name of the metadata file
-            swiftDownload = swiftService.download(container='containerModules', objects=objects, options=localoptions)
-            for downloaded in swiftDownload:
-                if ('error' in downloaded.keys()):
-                    print(downloaded['error'])
-                    warnings.warn('The metadata was not found on backend, creating new! If this is not your first time usage after installing the library, please consult with the support team before proceeding!', RuntimeWarning)
+        getObjsBackend(objs, self.backend)
 
         dburi = config['DATABASE_URI']
         self.clusterUrl = "spark://" + socket.gethostname() + ':' + config['CLUSTER_PORT']
         self.session = config_to_db_session(dburi, Base)
         self.config = config
         self.configpath = configpath
+        self.hdfsmodpath = '/modules/'
 
     def list_modules(self, prefix=''):
 
@@ -68,7 +62,6 @@ class SparkRunner(object):
 
         print('List of available datasets:')
         print('---------------------------')
-
         datasets = self.session.query(Dataset).filter(Dataset.name.like('%' + prefix + '%')).all()
         for dataset in datasets:
             if(dataset.module is None):
@@ -96,20 +89,16 @@ class SparkRunner(object):
 
             self.session.add(analysisMod)
             self.session.commit()
-
             # Upload the metadata and module to swift
-            options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
-            swiftService = SwiftService(options=options)
-            objects = []
-            objects.append(SwiftUploadObject(self.config['DB_LOCATION'], object_name='sqlite.db'))
-            objects.append(SwiftUploadObject(filepath, object_name=filename))
+            objs = []
+            if(self.backend == 'hdfs'):
+                objs.append((self.hdfsmodpath, self.config['DB_LOCATION']))
+                objs.append((self.hdfsmodpath, filepath))
+            elif(self.backend == 'swift'):
+                objs.append(('sqlite.db', self.config['DB_LOCATION']))
+                objs.append((filename, filepath))
 
-            swiftUpload = swiftService.upload(container='containerModules', objects=objects)
-            for uploaded in swiftUpload:
-                if("error" in uploaded.keys()):
-                    shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', self.config['DB_LOCATION'])
-                    raise RuntimeError(uploaded['error'])
-                print(uploaded)
+            saveObjsBackend(objs, self.backend, self.config)
         else:
             raise RuntimeError("Analysis " + name + " already exists")
 
@@ -130,19 +119,11 @@ class SparkRunner(object):
                 filepathsarr = []
 
                 # Download the module from swift first
-                options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
-                swiftService = SwiftService(options=options)
-
                 out_file = self.config['MODULE_LOCAL_STORAGE'] + analysisMod.filepath
-                localoptions = {'out_file': out_file}
-                objects = []
-                objects.append(analysisMod.filepath)
-                swiftDownload = swiftService.download(container='containerModules', objects=objects, options=localoptions)
 
-                for downloaded in swiftDownload:
-                    if("error" in downloaded.keys()):
-                        raise RuntimeError(downloaded['error'])
-                    print(downloaded)
+                objs = []
+                objs.append((self.hdfsmodpath + analysisMod.filepath, out_file))
+                getObjsBackend(objs, self.backend)  # Act acciording to the backend choice
 
                 for inputfile in inputs:
                     dataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
@@ -157,12 +138,20 @@ class SparkRunner(object):
                 params = json.dumps(params)
 
                 helperpath = dirname(dirname(os.path.abspath(__file__)))
+
                 if(features is None):
-                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.clusterUrl, helperpath, params, filepaths])
-                else:
-                    features['configpath'] = self.configpath  # Pass the configpath as a default parameter
+                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.clusterUrl, self.backend, helperpath, params, filepaths])
+                else:  # When there's a featureset to be saved from the module
+                    if('userdatadir' not in features):
+                        if(self.backend == 'hdfs'):
+                            features['userdatadir'] = 'hdfs://' + socket.gethostname() + ':9000' + '/features'
+                        elif(self.backend == 'swift'):
+                            features['userdatadir'] = 'swift://containerFeatures.SparkTest'
+
+                    features['configpath'] = self.configpath  # The configpath is passed as a default parameter
                     features = json.dumps(features)
-                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.clusterUrl, helperpath, params, filepaths, features])
+                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.clusterUrl, self.backend, helperpath, params, filepaths, features])
+
             else:
                 raise RuntimeError("Analysis module not found")
 
@@ -175,12 +164,15 @@ class SparkRunner(object):
         if(inputfiles):
 
             if(not userdatadir):
-                userdatadir = 'swift://containerFiles.SparkTest'
+                if(self.backend == 'hdfs'):
+                    userdatadir = 'hdfs://' + socket.gethostname() + ':9000' + '/files'
+                elif(self.backend == 'swift'):
+                    userdatadir = 'swift://containerFiles.SparkTest'
 
             path = dirname(dirname(os.path.abspath(__file__)))
             configpath = self.configpath
             originalpaths = json.dumps(inputfiles)
-            call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.clusterUrl, originalpaths, description, details, userdatadir, configpath])
+            call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.clusterUrl, self.backend, originalpaths, description, details, userdatadir, configpath])
 
         else:
             raise RuntimeError("Please ensure inputfiles is not None or empty")

@@ -3,7 +3,6 @@ from datetime import datetime, date, timedelta
 from collections import defaultdict
 import getpass
 import re
-from runner import SparkRunner
 import yaml
 import os
 from os.path import dirname
@@ -13,25 +12,9 @@ from sqlalchemy import text
 from swiftclient.service import SwiftService, SwiftUploadObject
 import shutil
 import json
-
-
-# Hack for using HDF5 datasets in Spark, also fetches the data from dataset using the dates provided by user
-def date_query(x, start_time, end_time):
-    start = date.fromtimestamp(start_time)
-    end = date.fromtimestamp(end_time)
-
-    delta = timedelta(days=1)
-    filepath = 'filepath here' + x
-    with h5py.File(filepath) as curr_file:
-        res = []
-        while start <= end:
-            currdate = start.strftime("%Y_%m_%d")
-            if currdate in curr_file:
-                dategrp = curr_file[currdate]
-                datedata = dategrp.get('ORDERS')
-                res.append(list(datedata[:]))
-            start += delta
-        return sum(res, [])
+import hdfs
+from hdfs import InsecureClient
+import socket
 
 
 def import_hdf5(x, filepath, table):
@@ -119,6 +102,75 @@ def config_session(configpath):
     return (session, config)
 
 
+def getObjsBackend(objs, backend):
+
+    if(backend == 'hdfs'):
+
+        client = InsecureClient('http://' + socket.gethostname() + ':50070')
+
+        for obj in objs:
+            retry = 0
+            while(retry < 10):
+                try:
+                    client.download(obj[0], obj[1], overwrite=False)
+                except hdfs.util.HdfsError as e:
+                    print(str(e))
+                    if(len(str(e)) < 1000):
+                        break
+                    if(retry == 10 and len(str(e)) > 1000):
+                        raise RuntimeError(e)
+                retry = retry + 1
+    elif(backend == 'swift'):
+
+        options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
+        swiftService = SwiftService(options=options)
+
+        for obj in objs:
+
+            # Create the containers which are used in this application for Object Storage
+            if(obj[0] == 'sqlite.db'):
+                swiftService.post(container='containerFiles')
+                swiftService.post(container='containerFeatures')
+                swiftService.post(container='containerModules')
+
+            out_file = obj[1]  # Get the output file location from runner
+            localoptions = {'out_file': out_file}
+            objects = []
+            objects.append(obj[0])
+            swiftDownload = swiftService.download(container='containerModules', objects=objects, options=localoptions)
+
+            for downloaded in swiftDownload:
+                if("error" in downloaded.keys()):
+                    raise RuntimeError(downloaded['error'])
+                # print(downloaded)
+
+
+def saveObjsBackend(objs, backend, config):
+
+    if(backend == 'hdfs'):
+        client = InsecureClient('http://' + socket.gethostname() + ':50070')
+        client.makedirs('/modules')
+        for obj in objs:
+            try:
+                client.upload(obj[0], obj[1], overwrite=True)
+            except Exception as e:
+                shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
+                raise RuntimeError(e)
+
+    elif(backend == 'swift'):
+        swiftService = SwiftService(options=options)
+        objects = []
+        for obj in objs:
+            objects.append(SwiftUploadObject(obj[1], object_name=obj[0]))
+
+            swiftUpload = swiftService.upload(container='containerModules', objects=objects)
+            for uploaded in swiftUpload:
+                if("error" in uploaded.keys()):
+                    shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
+                    raise RuntimeError(uploaded['error'])
+    print('Metadata/Module changed and uploaded')
+
+
 def create_dataset(sessionconfig, params):
 
     session = sessionconfig[0]
@@ -135,17 +187,13 @@ def create_dataset(sessionconfig, params):
         session.add(dataset)
         session.commit()
 
-        options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
-        swiftService = SwiftService(options=options)
-        objects = []
-        objects.append(SwiftUploadObject(config['DB_LOCATION'], object_name='sqlite.db'))
+        objs = []
+        if(config['BACKEND'] == 'hdfs'):
+            objs.append(('/modules/sqlite.db', config['DB_LOCATION']))
+        elif(config['BACKEND'] == 'swift'):
+            objs.append(('sqlite.db', config['DB_LOCATION']))
 
-        swiftUpload = swiftService.upload(container='containerModules', objects=objects)
-        for uploaded in swiftUpload:
-            if("error" in uploaded.keys()):
-                shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
-                raise RuntimeError(uploaded['error'])
-            print("Metadata changed and uploaded")
+        saveObjsBackend(objs, config['BACKEND'], config)
 
     else:
         raise RuntimeError("The dataset with name " + params['name'] + " already exists")
@@ -194,14 +242,10 @@ def create_relation(sessionconfig, featset, parents):
         session.execute(f)
 
     session.commit()
+    objs = []
+    if(config['BACKEND'] == 'hdfs'):
+        objs.append(('/modules/sqlite.db', config['DB_LOCATION']))
+    elif(config['BACKEND'] == 'swift'):
+        objs.append(('sqlite.db', config['DB_LOCATION']))
 
-    options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
-    swiftService = SwiftService(options=options)
-    objects = []
-    objects.append(SwiftUploadObject(config['DB_LOCATION'], object_name='sqlite.db'))
-    swiftUpload = swiftService.upload(container='containerModules', objects=objects)
-    for uploaded in swiftUpload:
-        if("error" in uploaded.keys()):
-            shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
-            raise RuntimeError(uploaded['error'])
-        print("Metadata changed , uploaded")
+    saveObjsBackend(objs, config['BACKEND'], config)

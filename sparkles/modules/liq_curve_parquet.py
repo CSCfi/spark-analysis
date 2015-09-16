@@ -8,6 +8,7 @@ from pyspark.sql import *
 import os
 import json
 from sparkles.modules.utils.helper import saveFeatures
+import argparse
 
 
 # Hash the keys into different time interval periods and prices
@@ -44,29 +45,38 @@ def flatten_lists(x):
     return (x[0], (sum(x[1][0], []), sum(x[1][1], [])))
 
 
-def main(argv):
+def main():
     conf = SparkConf()
     conf.setAppName("Liq Cost Parquet")
     conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 
-    # Swift Connection
-    hadoopConf = sc._jsc.hadoopConfiguration()
-    hadoopConf.set("fs.swift.impl", "org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem")
-    hadoopConf.set("fs.swift.service.SparkTest.auth.url", os.environ['OS_AUTH_URL'] + "/tokens")
-    hadoopConf.set("fs.swift.service.SparkTest.http.port", "8443")
-    hadoopConf.set("fs.swift.service.SparkTest.auth.endpoint.prefix", "/")
-    hadoopConf.set("fs.swift.service.SparkTest.region", os.environ['OS_REGION_NAME'])
-    hadoopConf.set("fs.swift.service.SparkTest.public", "false")
-    hadoopConf.set("fs.swift.service.SparkTest.tenant", os.environ['OS_TENANT_ID'])
-    hadoopConf.set("fs.swift.service.SparkTest.username", os.environ['OS_USERNAME'])
-    hadoopConf.set("fs.swift.service.SparkTest.password", os.environ['OS_PASSWORD'])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("backend", type=str)
+    parser.add_argument("helperpath", type=str)
+    parser.add_argument("params", type=str)
+    parser.add_argument("inputs", type=str)
 
-    helperpath = str(argv[1])
+    args = parser.parse_args()
+
+    # Swift Connection
+    if(args.backend == 'swift'):
+        hadoopConf = sc._jsc.hadoopConfiguration()
+        hadoopConf.set("fs.swift.impl", "org.apache.hadoop.fs.swift.snative.SwiftNativeFileSystem")
+        hadoopConf.set("fs.swift.service.SparkTest.auth.url", os.environ['OS_AUTH_URL'] + "/tokens")
+        hadoopConf.set("fs.swift.service.SparkTest.http.port", "8443")
+        hadoopConf.set("fs.swift.service.SparkTest.auth.endpoint.prefix", "/")
+        hadoopConf.set("fs.swift.service.SparkTest.region", os.environ['OS_REGION_NAME'])
+        hadoopConf.set("fs.swift.service.SparkTest.public", "false")
+        hadoopConf.set("fs.swift.service.SparkTest.tenant", os.environ['OS_TENANT_ID'])
+        hadoopConf.set("fs.swift.service.SparkTest.username", os.environ['OS_USERNAME'])
+        hadoopConf.set("fs.swift.service.SparkTest.password", os.environ['OS_PASSWORD'])
+
+    helperpath = args.helperpath
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
-    params = json.loads(str(argv[2]))
-    inputs = json.loads(str(argv[3]))
+    params = json.loads(args.params)
+    inputs = json.loads(args.inputs)
 
     tablename = str(params['tablename'])
 
@@ -126,4 +136,4 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
