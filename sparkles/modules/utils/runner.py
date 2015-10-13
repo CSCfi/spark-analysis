@@ -2,7 +2,7 @@ from sqlalchemy import text
 from models import Base, config_to_db_session, Dataset, Analysis
 from datetime import datetime
 import getpass
-from helper import saveObjsBackend, getObjsBackend
+from helper import saveObjsBackend, getObjsBackend, delete_item
 from subprocess import call
 import yaml
 import os
@@ -14,6 +14,7 @@ import shutil
 import socket
 from hdfs import InsecureClient
 import hdfs
+import re
 
 
 class SparkRunner(object):
@@ -176,3 +177,30 @@ class SparkRunner(object):
 
         else:
             raise RuntimeError("Please ensure inputfiles is not None or empty")
+
+    def drop_analysis(self, modulename=''):
+
+        if(modulename is None):
+            raise RuntimeError("Module name is required")
+        else:
+            analysisMod = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
+                params(name=modulename).first()
+
+            delete_item('/modules/' + analysisMod.filepath)
+            self.session.delete(analysisMod)
+            self.session.commit()
+            print('Module deleted')
+
+    def drop_dataset(self, datasetname=''):
+
+        if(datasetname is None):
+            raise RuntimeError("Dataset name is required")
+        else:
+            dataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+                params(name=datasetname).first()
+
+            m = re.match(r'.*(/.*/.*)', dataset.filepath)
+            delete_item(m.group(1))
+            self.session.delete(dataset)
+            self.session.commit()
+            print('Dataset deleted')
