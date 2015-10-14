@@ -13,6 +13,7 @@ import argparse
 import time
 import calendar
 
+
 # Hash the keys into different time interval periods and prices
 def keymod(x, start_time, interval):
 
