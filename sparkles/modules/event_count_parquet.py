@@ -11,6 +11,8 @@ import json
 from sparkles.modules.utils.helper import saveFeatures
 from os.path import dirname
 import argparse
+import time
+import calendar
 
 
 # Hash the keys into different interval periods
