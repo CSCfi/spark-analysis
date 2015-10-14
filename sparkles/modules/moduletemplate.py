@@ -38,8 +38,15 @@ def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, descript
 def your_module_implementation(sc, params=None, inputs=None, features=None):
 
     tablename = str(params['tablename'])  # Mandatory parameter
-    # start_time = int(params['start_time']) / 1000.0  # Convert each parameter to their correct types
-    # end_time = int(params['end_time']) / 1000.0
+
+    # The time would be provided by user as a string in this format "2011-12-29_14:43:47:141", we need to convert into epoch times for working
+
+    # start_time_str = str(params['start_time'])
+    # start_time = int(str(calendar.timegm(time.strptime( start_time_str[:-4],'%Y-%m-%d_%H:%M:%S'))) + start_time_str[-3:])  # convert to epoch
+
+    # end_time_str = str(params['end_time'])
+    # end_time = int(str(calendar.timegm(time.strptime( end_time_str[:-4],'%Y-%m-%d_%H:%M:%S'))) + end_time_str[-3:])  # convert to epoch
+
     # interval = float(params['interval'])
 
     filepath = str(inputs[0])  # Provide the complete path

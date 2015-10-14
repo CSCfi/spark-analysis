@@ -1,6 +1,7 @@
 # Counts the number of events from start to end time in a given window of fixed interval
 import h5py
 from pyspark import SparkConf, SparkContext
+from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerType, LongType, ArrayType, TimestampType
 from datetime import datetime, date, timedelta
 import sys
 from operator import add
@@ -23,8 +24,9 @@ def keymod(x, start_time, interval):
 # Transform the final time
 def timetr(x, start_time, interval):
 
-    t = (start_time + x[0] * interval) / 1000.0
-    dt = datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S.%f')  # x[0] is keyindex
+    dt = int(start_time + x[0] * interval)
+    # t = (start_time + x[0] * interval) / 1000.0
+    # dt = datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S.%f')  # x[0] is keyindex
     return (dt, x[1])
 
 
@@ -45,6 +47,23 @@ def flatten_lists(x):
     return (x[0], (sum(x[1][0], []), sum(x[1][1], [])))
 
 
+def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+
+    schemaString = "timestamp curve"
+
+    fields_rdd = []
+    for field_name in schemaString.split():
+        if(field_name == 'curve'):
+            fields_rdd.append(StructField(field_name, ArrayType(ArrayType(ArrayType(IntegerType(), True), True), True), True))
+        else:
+            fields_rdd.append(StructField(field_name, LongType(), True))
+
+    schema_rdd = StructType(fields_rdd)
+    dfRdd = sqlContext.createDataFrame(x, schema_rdd)
+
+    saveFeatures(configpath, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
+
+
 def main():
     conf = SparkConf()
     conf.setAppName("Liq Cost Parquet")
@@ -56,6 +75,7 @@ def main():
     parser.add_argument("helperpath", type=str)
     parser.add_argument("params", type=str)
     parser.add_argument("inputs", type=str)
+    parser.add_argument("features", type=str, nargs='?')
 
     args = parser.parse_args()
 
@@ -77,12 +97,22 @@ def main():
 
     params = json.loads(args.params)
     inputs = json.loads(args.inputs)
+    features = json.loads(args.features)
+
+    userdatadir = str(features['userdatadir'])
+    description = str(features['description'])
+    details = str(features['details'])
+    featureset_name = str(features['featureset_name'])
+    modulename = str(features['modulename'])
+    configpath = str(features['configpath'])
 
     tablename = str(params['tablename'])
 
-    start_time = int(params['start_time'])
+    start_time_str = str(params['start_time'])
+    start_time = int(str(calendar.timegm(time.strptime(start_time_str[:-4], '%Y-%m-%d_%H:%M:%S'))) + start_time_str[-3:])  # convert to epoch
 
-    end_time = int(params['end_time'])
+    end_time_str = str(params['end_time'])
+    end_time = int(str(calendar.timegm(time.strptime(end_time_str[:-4], '%Y-%m-%d_%H:%M:%S'))) + end_time_str[-3:])  # convert to epoch
 
     interval = float(params['interval'])
 
@@ -127,6 +157,10 @@ def main():
     rdd = rdd.sortByKey()
     # rdd = rdd.map(timetr)
     d = rdd.collect()
+
+    parent_datasets = []
+    parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
+    saveResult(configpath, rdd, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
 
     for k in d:  # Print out the results
         print(k)

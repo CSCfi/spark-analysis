@@ -25,8 +25,9 @@ def keymod(x, start_time, interval):
 # Transform the final time
 def timetr(x, start_time, interval):
 
-    t = (start_time + x[0] * interval) / 1000.0
-    dt = datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S.%f')  # x[0] is keyindex
+    dt = int(start_time + x[0] * interval)
+    # t = (start_time + x[0] * interval) / 1000.0
+    # dt = datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S.%f')  # x[0] is keyindex
     return (dt, x[1])  # x[1] is the total aggregated count
 
 
@@ -39,7 +40,7 @@ def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, descript
         if(field_name == 'count'):
             fields_rdd.append(StructField(field_name, IntegerType(), True))
         else:
-            fields_rdd.append(StructField(field_name, StringType(), True))
+            fields_rdd.append(StructField(field_name, LongType(), True))
 
     schema_rdd = StructType(fields_rdd)
     dfRdd = sqlContext.createDataFrame(x, schema_rdd)
@@ -91,9 +92,11 @@ def main():
     tableindex = {"ORDERS": 3, "CANCELS": 4}
     tablename = str(params['tablename'])
 
-    start_time = int(params['start_time'])
+    start_time_str = str(params['start_time'])
+    start_time = int(str(calendar.timegm(time.strptime(start_time_str[:-4], '%Y-%m-%d_%H:%M:%S'))) + start_time_str[-3:])  # convert to epoch
 
-    end_time = int(params['end_time'])
+    end_time_str = str(params['end_time'])
+    end_time = int(str(calendar.timegm(time.strptime(end_time_str[:-4], '%Y-%m-%d_%H:%M:%S'))) + end_time_str[-3:])  # convert to epoch
 
     interval = float(params['interval'])
 
