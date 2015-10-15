@@ -249,3 +249,14 @@ def create_relation(sessionconfig, featset, parents):
         objs.append(('sqlite.db', config['DB_LOCATION']))
 
     saveObjsBackend(objs, config['BACKEND'], config)
+
+
+def delete_item(filepath='', localpath=''):
+
+    client = InsecureClient('http://' + socket.gethostname() + ':50070')
+    client.delete(filepath, recursive=True)
+
+    try:
+        os.remove(localpath)
+    except OSError:
+        pass
