@@ -183,8 +183,8 @@ class SparkRunner(object):
         if(modulename is None):
             raise RuntimeError("Module name is required")
         else:
-            analysisMod = self.session.query(Analysis).from_statement(text("SELECT * FROM analysis where name=:name")).\
-                params(name=modulename).first()
+
+            analysisMod = self.session.query(Analysis).filter_by(name=modulename).first()
 
             delete_item('/modules/' + analysisMod.filepath)
             self.session.delete(analysisMod)
@@ -196,8 +196,8 @@ class SparkRunner(object):
         if(datasetname is None):
             raise RuntimeError("Dataset name is required")
         else:
-            dataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
-                params(name=datasetname).first()
+
+            dataset = self.session.query(Dataset).filter_by(name=datasetname).first()
 
             m = re.match(r'.*(/.*/.*)', dataset.filepath)
             delete_item(m.group(1))
