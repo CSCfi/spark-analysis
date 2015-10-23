@@ -26,7 +26,7 @@ def transform_zero_destroys(x):
         tc_dt = datetime.fromtimestamp(tc / 1000)
         td_dt = datetime(tc_dt.year, tc_dt.month, tc_dt.day, 23, 59, 59)
         td = calendar.timegm(datetime.timetuple(td_dt)) * 1000
-        td = td + 999
+        td = td + 999  # Add the milliseconds
 
     return (tc, td, x.side, x.price, x.quantity)
 
@@ -36,11 +36,9 @@ def transform_zero_destroys(x):
 def generate_timestamps(start_time, end_time, interval):
     def _generate_timestamps(created, destroyed, side, price, qty):  # Alternative for accessing data using logical indexing
         start_time_row = int(ceil((created - start_time) / interval) * interval + start_time)
-        rng = takewhile(
-            lambda x: created <= x < destroyed,
-            xrange(start_time_row, end_time, interval))
-        for i in rng:
-            yield (i, price), qty  # Send the key as timestamp,price and value as qty (in order to sum qty later easily)
+        filtered_timestamps = takewhile(lambda x: created <= x < destroyed, xrange(start_time_row, end_time, interval))  # Generation
+        for ts in filtered_timestamps:
+            yield (ts, price), qty  # Send the key as timestamp,price and value as qty (in order to sum qty later easily)
 
     return _generate_timestamps
 
@@ -48,7 +46,7 @@ def generate_timestamps(start_time, end_time, interval):
 # Sum the quantities for given price at a given time
 def sum_qty_for_price(x):
 
-    return (x[0][0], [x[0][1], sum(x[1])])  # Back to logical indexing!
+    return (x[0][0], [x[0][1], sum(x[1])])  # Back to logical indexing! x[0][1] contains the price and x[1] the quantities
 
 
 # Sort the pairs
