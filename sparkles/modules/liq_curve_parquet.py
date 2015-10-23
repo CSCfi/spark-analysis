@@ -11,57 +11,72 @@ import json
 from sparkles.modules.utils.helper import saveFeatures
 import argparse
 import time
+from math import ceil
+from itertools import takewhile
 import calendar
 
 
-# Hash the keys into different time interval periods and prices
-def keymod(x, start_time, interval):
+# Transform all the destroy values which are zero to the end of the day's timestamp
+def transform_zero_destroys(x):
 
-    curr_t = x.created
-    curr_t = curr_t - start_time
-    keyindex = int(curr_t / interval)
-    return (str(keyindex) + ' ' + str(x.price), x.quantity)
+    tc = x.created
+    td = x.destroyed
 
+    if(td == 0):
+        tc_dt = datetime.fromtimestamp(tc / 1000)
+        td_dt = datetime(tc_dt.year, tc_dt.month, tc_dt.day, 23, 59, 59)
+        td = calendar.timegm(datetime.timetuple(td_dt)) * 1000
+        td = td + 999
 
-# Transform the final time
-def timetr(x, start_time, interval):
-
-    dt = int(start_time + x[0] * interval)
-    # t = (start_time + x[0] * interval) / 1000.0
-    # dt = datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M:%S.%f')  # x[0] is keyindex
-    return (dt, x[1])
+    return (tc, td, x.side, x.price, x.quantity)
 
 
-def testred(x, y):
+# This logic uses reverse generation. It generates input timestamps for each of the records fetched from dataset
+# It shows usage of generators as transformation function for Spark which is quite useful for advance querying
+def generate_timestamps(start_time, end_time, interval):
+    def _generate_timestamps(created, destroyed, side, price, qty):  # Alternative for accessing data using logical indexing
+        start_time_row = int(ceil((created - start_time) / interval) * interval + start_time)
+        rng = takewhile(
+            lambda x: created <= x < destroyed,
+            xrange(start_time_row, end_time, interval))
+        for i in rng:
+            yield (i, price), qty  # Send the key as timestamp,price and value as qty (in order to sum qty later easily)
 
-    return x + y
-
-
-# Change the key of the RDD from time,price to only time
-def keysplit(x):
-
-    res = x[0].split()
-    return (int(res[0]), (int(res[1]), x[1]))
-
-
-def flatten_lists(x):
-
-    return (x[0], (sum(x[1][0], []), sum(x[1][1], [])))
+    return _generate_timestamps
 
 
-def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+# Sum the quantities for given price at a given time
+def sum_qty_for_price(x):
 
-    schemaString = "timestamp curve"
+    return (x[0][0], [x[0][1], sum(x[1])])  # Back to logical indexing!
+
+
+# Sort the pairs
+def sorter(x):
+
+    x.sort()
+    return x
+
+
+# Helper function to convert rdd to dataframe which is a more efficient for SQL operations like join
+def rdd_to_dataframe(sqlContext, rdd, curve):
+
+    schemaString = "timestamp " + curve
 
     fields_rdd = []
     for field_name in schemaString.split():
-        if(field_name == 'curve'):
-            fields_rdd.append(StructField(field_name, ArrayType(ArrayType(ArrayType(IntegerType(), True), True), True), True))
+        if(field_name == curve):
+            fields_rdd.append(StructField(field_name, ArrayType(ArrayType(IntegerType(), True), True), True))
         else:
             fields_rdd.append(StructField(field_name, LongType(), True))
 
     schema_rdd = StructType(fields_rdd)
-    dfRdd = sqlContext.createDataFrame(x, schema_rdd)
+    df = sqlContext.createDataFrame(rdd, schema_rdd)
+    return df
+
+
+# Save the data as parquet
+def saveResult(configpath, dfRdd, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
     saveFeatures(configpath, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
 
@@ -116,7 +131,7 @@ def main():
     end_time_str = str(params['end_time'])
     end_time = int(str(calendar.timegm(time.strptime(end_time_str[:-4], '%Y-%m-%d_%H:%M:%S'))) + end_time_str[-3:])  # convert to epoch
 
-    interval = float(params['interval'])
+    interval = int(params['interval'])
 
     filepath = str(inputs[0])  # Provide the complete path
     filename = os.path.basename(os.path.abspath(filepath))
@@ -125,48 +140,39 @@ def main():
     sqlContext = SQLContext(sc)
     rdd = sqlContext.parquetFile(tablepath)
 
-    # rdd = rdd.filter(start_time <= rdd.created / 1000.0 < end_time)  # Filter data according to the start and end times
-
     rdd.registerTempTable(tablename)
-    rdd = sqlContext.sql("SELECT created, side, price, quantity FROM " + tablename + " WHERE created <" + str(end_time) + " AND created >=" + str(start_time))
+    rdd = sqlContext.sql("SELECT created, destroyed, side, price, quantity FROM " + tablename + " WHERE created <=" + str(end_time) + " AND destroyed >" + str(start_time))
 
-    rdd1 = rdd.filter(rdd.side == 66)
-    rdd2 = rdd.filter(rdd.side == 83)
+    rdd = rdd.map(lambda x: transform_zero_destroys(x))
 
-    rdd1 = rdd1.map(lambda x: keymod(x, start_time, interval))  # Key hashing
-    rdd2 = rdd2.map(lambda x: keymod(x, start_time, interval))
+    rdd1 = rdd.filter(lambda x: x[2] == 66)  # Filter records for Buy, logical index 2 represents Side here
+    rdd2 = rdd.filter(lambda x: x[2] == 83)  # Filter records for Sell
 
-    # dd = rdd1.collect()
-    # for k in dd:
-    #    print(k)
+    rdd1 = rdd1.flatMap(lambda x: generate_timestamps(start_time, end_time, interval)(*x)).groupByKey()
+    rdd2 = rdd2.flatMap(lambda x: generate_timestamps(start_time, end_time, interval)(*x)).groupByKey()
 
-    rdd1 = rdd1.reduceByKey(testred)  # Sum quantities
-    rdd2 = rdd2.reduceByKey(testred)
+    rdd1 = rdd1.map(lambda x: sum_qty_for_price(x)).groupByKey()
+    rdd2 = rdd2.map(lambda x: sum_qty_for_price(x)).groupByKey()
 
-    rdd1 = rdd1.map(keysplit)  # Change the key to time period
-    rdd2 = rdd2.map(keysplit)
+    rdd1 = rdd1.mapValues(list)
+    rdd1 = rdd1.mapValues(lambda x: sorter(x))
 
-    rdd1 = rdd1.groupByKey().map(lambda x: (x[0], list(x[1])))  # Group the prices and summed quantities into one time period
-    rdd2 = rdd2.groupByKey().map(lambda x: (x[0], list(x[1])))
+    rdd2 = rdd2.mapValues(list)
+    rdd2 = rdd2.mapValues(lambda x: sorter(x))
 
-    rdd1 = rdd1.map(lambda x: timetr(x, start_time, interval))  # Human readable time
-    rdd2 = rdd2.map(lambda x: timetr(x, start_time, interval))
+    df_buy = rdd_to_dataframe(sqlContext, rdd1, "curve_buy")
+    df_sell = rdd_to_dataframe(sqlContext, rdd2, "curve_sell")
 
-    rdd = rdd1.cogroup(rdd2)  # Group the RDDs of Buy and Sell together on the basis of time period
-    rdd = rdd.map(lambda x: (x[0], (list(x[1][0]), list(x[1][1]))))  # Iterable object to list
-    rdd = rdd.map(flatten_lists)
-
-    rdd = rdd.sortByKey()
-    # rdd = rdd.map(timetr)
-    d = rdd.collect()
+    df_total = df_buy.join(df_sell, df_buy.timestamp == df_sell.timestamp)
+    df_total = df_total.select(df_buy.timestamp, df_total.curve_buy, df_total.curve_sell)  # Just one timestamp field should be there not two!
+    df_total = df_total.sort(df_total.timestamp)
 
     parent_datasets = []
     parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
-    saveResult(configpath, rdd, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
+    saveResult(configpath, df_total, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)  # Notice we pass here the dataframe not rdd because we have already created it
 
-    for k in d:  # Print out the results
+    for k in df_total.collect():  # Print out the results
         print(k)
-    #    print(v)
 
     sc.stop()
 
