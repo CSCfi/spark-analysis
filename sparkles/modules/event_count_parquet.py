@@ -109,18 +109,20 @@ def main():
     tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
 
     sqlContext = SQLContext(sc)
-    rdd = sqlContext.read.parquet(tablepath)
+    sqlContext.setConf("spark.sql.shuffle.partitions", "10")
 
-    rdd.registerTempTable(tablename)
-    rdd = sqlContext.sql("SELECT created FROM " + tablename + " WHERE created <" + str(end_time) + " AND created >=" + str(start_time))
+    df = sqlContext.read.parquet(tablepath)
 
-    rdd1 = rdd.map(lambda x: keymod(x, start_time, interval)).reduceByKey(add)
-    rdd1 = rdd1.sortByKey()
-    rdd1 = rdd1.map(lambda x: timetr(x, start_time, interval))  # Human readable time
+    df.registerTempTable(tablename)
+    df = sqlContext.sql("SELECT created FROM " + tablename + " WHERE created <" + str(end_time) + " AND created >=" + str(start_time))
+
+    rdd = df.map(lambda x: keymod(x, start_time, interval)).reduceByKey(add)
+    rdd = rdd.sortByKey()
+    rdd = rdd.map(lambda x: timetr(x, start_time, interval))  # Human readable time
 
     parent_datasets = []
     parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
-    saveResult(configpath, rdd1, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
+    saveResult(configpath, rdd, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
 
     d = rdd1.collect()
 
