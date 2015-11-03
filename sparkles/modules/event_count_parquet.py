@@ -109,7 +109,7 @@ def main():
     tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
 
     sqlContext = SQLContext(sc)
-    rdd = sqlContext.parquetFile(tablepath)
+    rdd = sqlContext.read.parquet(tablepath)
 
     rdd.registerTempTable(tablename)
     rdd = sqlContext.sql("SELECT created FROM " + tablename + " WHERE created <" + str(end_time) + " AND created >=" + str(start_time))
