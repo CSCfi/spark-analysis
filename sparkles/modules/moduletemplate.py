@@ -56,7 +56,9 @@ def your_module_implementation(sc, params=None, inputs=None, features=None):
     tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'  # Don't change
 
     sqlContext = SQLContext(sc)  # Create SQLContext var from SparkContext, Useful only if you are using dataframes i.e. parquet files
-    rdd = sqlContext.parquetFile(tablepath)
+    sqlContext.setConf("spark.sql.shuffle.partitions", "10")  # Default value
+
+    rdd = sqlContext.read.parquet(tablepath)
     rdd.registerTempTable("tablename")  # Register the table in parquet file for our usage with SQL queries
     rdd = sqlContext.sql("SELECT fields from tablename WHERE field_name == criteria")  # A dataframe is returned which can be used as an RDD
 

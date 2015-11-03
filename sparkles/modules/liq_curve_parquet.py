@@ -136,12 +136,14 @@ def main():
     tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
 
     sqlContext = SQLContext(sc)
-    rdd = sqlContext.parquetFile(tablepath)
+    sqlContext.setConf("spark.sql.shuffle.partitions", "10")
 
-    rdd.registerTempTable(tablename)
-    rdd = sqlContext.sql("SELECT created, destroyed, side, price, quantity FROM " + tablename + " WHERE created <=" + str(end_time) + " AND destroyed >" + str(start_time))
+    df = sqlContext.read.parquet(tablepath)
 
-    rdd = rdd.map(lambda x: transform_zero_destroys(x))
+    df.registerTempTable(tablename)
+    df = sqlContext.sql("SELECT created, destroyed, side, price, quantity FROM " + tablename + " WHERE created <=" + str(end_time) + " AND destroyed >" + str(start_time))
+
+    rdd = df.map(lambda x: transform_zero_destroys(x))
 
     rdd1 = rdd.filter(lambda x: x[2] == 66)  # Filter records for Buy, logical index 2 represents Side here
     rdd2 = rdd.filter(lambda x: x[2] == 83)  # Filter records for Sell

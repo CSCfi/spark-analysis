@@ -50,7 +50,7 @@ def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, des
     params['schema'] = schema
 
     try:
-        dataframe.saveAsParquetFile(tablepath)
+        dataframe.write.parquet(tablepath)
     except Exception as e:
         raise RuntimeError(e)
 
@@ -82,7 +82,7 @@ def saveFeatures(configpath, dataframe, userdatadir, featureset_name, descriptio
     params['schema'] = schema
 
     try:
-        dataframe.saveAsParquetFile(filepath)
+        dataframe.write.parquet(filepath)
     except Exception as e:
         raise RuntimeError(e)
 
