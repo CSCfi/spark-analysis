@@ -5,7 +5,7 @@ from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerT
 from datetime import datetime, date, timedelta
 import sys
 from operator import add
-from pyspark.sql import *
+from pyspark.sql import SQLContext
 import os
 import json
 from sparkles.modules.utils.helper import saveFeatures
@@ -58,6 +58,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("backend", type=str)
     parser.add_argument("helperpath", type=str)
+    parser.add_argument("shuffle_partitions", type=str)
     parser.add_argument("params", type=str)
     parser.add_argument("inputs", type=str)
     parser.add_argument("features", type=str, nargs='?')
@@ -79,6 +80,7 @@ def main():
 
     helperpath = args.helperpath
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
+    shuffle_partitions = args.shuffle_partitions
 
     params = json.loads(args.params)
     inputs = json.loads(args.inputs)
@@ -91,7 +93,6 @@ def main():
     modulename = str(features['modulename'])
     configpath = str(features['configpath'])
 
-    tableindex = {"ORDERS": 3, "CANCELS": 4}
     tablename = str(params['tablename'])
 
     start_time_str = str(params['start_time'])
@@ -102,14 +103,12 @@ def main():
 
     interval = float(params['interval'])
 
-    index = tableindex[tablename]
-
     filepath = str(inputs[0])  # Provide the complete path
     filename = os.path.basename(os.path.abspath(filepath))
     tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
 
     sqlContext = SQLContext(sc)
-    sqlContext.setConf("spark.sql.shuffle.partitions", "10")
+    sqlContext.setConf("spark.sql.shuffle.partitions", shuffle_partitions)
 
     df = sqlContext.read.parquet(tablepath)
 
@@ -124,11 +123,7 @@ def main():
     parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
     saveResult(configpath, rdd, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
 
-    d = rdd1.collect()
-
-    for k in d:
-        print(k)
-        # print(v)
+    print(rdd.collect())
 
     sc.stop()
 

@@ -5,7 +5,7 @@ from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerT
 from datetime import datetime, date, timedelta
 import sys
 from operator import add
-from pyspark.sql import *
+from pyspark.sql import SQLContext
 import os
 import json
 from sparkles.modules.utils.helper import saveFeatures
@@ -88,6 +88,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("backend", type=str)
     parser.add_argument("helperpath", type=str)
+    parser.add_argument("shuffle_partitions", type=str)
     parser.add_argument("params", type=str)
     parser.add_argument("inputs", type=str)
     parser.add_argument("features", type=str, nargs='?')
@@ -109,6 +110,7 @@ def main():
 
     helperpath = args.helperpath
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
+    shuffle_partitions = args.shuffle_partitions
 
     params = json.loads(args.params)
     inputs = json.loads(args.inputs)
@@ -136,7 +138,7 @@ def main():
     tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
 
     sqlContext = SQLContext(sc)
-    sqlContext.setConf("spark.sql.shuffle.partitions", "10")
+    sqlContext.setConf("spark.sql.shuffle.partitions", shuffle_partitions)
 
     df = sqlContext.read.parquet(tablepath)
 
