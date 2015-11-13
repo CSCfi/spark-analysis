@@ -1,4 +1,4 @@
-from pyspark.sql import *
+from pyspark.sql import SQLContext
 import h5py
 from pyspark import SparkConf, SparkContext
 from datetime import datetime, date, timedelta
@@ -88,12 +88,9 @@ def import_hdf5(x, originalpath, table):
         return list(data[:])
 
 
-def to_int(x):
-    i = 0
-    while(i < len(x)):
-        x[i] = int(x[i])
-        i = i + 1
-    return x
+def numpy_to_native(x):
+
+    return x.tolist()
 
 
 def main():
@@ -109,6 +106,7 @@ def main():
     parser.add_argument("details", type=str)
     parser.add_argument("userdatadir", type=str)
     parser.add_argument("configpath", type=str)
+    parser.add_argument("partitions", type=int)
 
     args = parser.parse_args()
 
@@ -125,7 +123,7 @@ def main():
         hadoopConf.set("fs.swift.service.SparkTest.username", os.environ['OS_USERNAME'])
         hadoopConf.set("fs.swift.service.SparkTest.password", os.environ['OS_PASSWORD'])
 
-    partitions = 12  # Default number of jobs
+    partitions = args.partitions  # Default number of jobs
     helperpath = dirname(os.path.abspath(__file__))
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
 
@@ -138,23 +136,18 @@ def main():
 
     for originalpath in originalpaths:
         hfile = add_all_dates(originalpath)
-        # print(hfile.name)
 
         raw_file = sc.textFile('file://' + hfile.name, partitions)
         rdd1 = raw_file.flatMap(lambda x: import_hdf5(x, originalpath, "ORDERS"))
-        rdd1 = rdd1.map(lambda x: list(x))
-        rdd1 = rdd1.map(to_int)
+        rdd1 = rdd1.map(numpy_to_native)
 
         rdd2 = raw_file.flatMap(lambda x: import_hdf5(x, originalpath, "CANCELS"))
-        rdd2 = rdd2.map(lambda x: list(x))
-        rdd2 = rdd2.map(to_int)
+        rdd2 = rdd2.map(numpy_to_native)
 
         rdd3 = raw_file.flatMap(lambda x: import_hdf5(x, originalpath, "TRADES"))
-        rdd3 = rdd3.map(lambda x: list(x))
-        rdd3 = rdd3.map(to_int)
+        rdd3 = rdd3.map(numpy_to_native)
 
-        # d = rdd1.count()
-        # print(d)
+        # print(rdd1.count())
 
         sqlContext = SQLContext(sc)
         orders_sql(configpath, rdd1, sqlContext, userdatadir, originalpath, description, details)
