@@ -173,7 +173,9 @@ class SparkRunner(object):
             path = dirname(dirname(os.path.abspath(__file__)))
             configpath = self.configpath
             originalpaths = json.dumps(inputfiles)
-            call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.clusterUrl, self.backend, originalpaths, description, details, userdatadir, configpath])
+            partitions = str(self.config['IMPORT_PARTITIONS'])
+
+            call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.clusterUrl, self.backend, originalpaths, description, details, userdatadir, configpath, partitions])
 
         else:
             raise RuntimeError("Please ensure inputfiles is not None or empty")
