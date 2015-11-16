@@ -4,7 +4,7 @@ from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerT
 from datetime import datetime, date, timedelta
 import sys
 from operator import add
-from pyspark.sql import *
+from pyspark.sql import SQLContext
 import os
 import json
 from sparkles.modules.utils.helper import saveFeatures  # If you need to save result as a feature set
@@ -37,7 +37,7 @@ def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, descript
 
 
 # This is the function where you will write your module with logic and implementation
-def your_module_implementation(sc, params=None, inputs=None, features=None):
+def your_module_implementation(sc, sqlContext, params=None, inputs=None, features=None):
 
     tablename = str(params['tablename'])  # Mandatory parameter
 
@@ -54,9 +54,6 @@ def your_module_implementation(sc, params=None, inputs=None, features=None):
     filepath = str(inputs[0])  # Provide the complete path
     filename = os.path.basename(os.path.abspath(filepath))  # Don't change
     tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'  # Don't change
-
-    sqlContext = SQLContext(sc)  # Create SQLContext var from SparkContext, Useful only if you are using dataframes i.e. parquet files
-    sqlContext.setConf("spark.sql.shuffle.partitions", "10")  # Default value
 
     rdd = sqlContext.read.parquet(tablepath)
     rdd.registerTempTable("tablename")  # Register the table in parquet file for our usage with SQL queries
@@ -102,6 +99,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("backend", type=str)
     parser.add_argument("helperpath", type=str)
+    parser.add_argument("shuffle_partitions", type=str)
     parser.add_argument("params", type=str)
     parser.add_argument("inputs", type=str)
     parser.add_argument("features", type=str, nargs='?')
@@ -123,14 +121,18 @@ def main():
 
     helperpath = str(args.helperpath)  # This is passed by default
     sc.addFile(helperpath + "/utils/helper.py")  # To import custom modules
+    shuffle_partitions = args.shuffle_partitions
 
     # Create a dict and pass it in your_module_implementation
     params = json.loads(args.params)
     inputs = json.loads(args.inputs)
-    # features = json.loads(args.features)  # Only used when you want to create a feature set
+    features = json.loads(args.features)  # Only used when you want to create a feature set
 
-    your_module_implementation(sc, params=params, inputs=inputs, features=features)
+    sqlContext = SQLContext(sc)  # Create SQLContext var from SparkContext, To work with our default format of datasets i.e. Parquet
+    sqlContext.setConf("spark.sql.shuffle.partitions", shuffle_partitions)  # Don't change, required for controlling parallelism
 
+    # Pass the sc (Spark Context) and sqlContext along with the different paramters and inputs.
+    your_module_implementation(sc, sqlContext, params=params, inputs=inputs, features=features)
 
 if __name__ == "__main__":
     main()

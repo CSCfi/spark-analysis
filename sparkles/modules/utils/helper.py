@@ -144,6 +144,9 @@ def getObjsBackend(objs, backend):
                     raise RuntimeError(downloaded['error'])
                 # print(downloaded)
 
+    elif(backend == 'nfs'):  # Every file is already in respective local dirs
+        pass
+
 
 def saveObjsBackend(objs, backend, config):
 
@@ -158,6 +161,7 @@ def saveObjsBackend(objs, backend, config):
                 raise RuntimeError(e)
 
     elif(backend == 'swift'):
+        options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os  .environ['OS_TENANT_NAME']}
         swiftService = SwiftService(options=options)
         objects = []
         for obj in objs:
@@ -168,6 +172,11 @@ def saveObjsBackend(objs, backend, config):
                 if("error" in uploaded.keys()):
                     shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
                     raise RuntimeError(uploaded['error'])
+
+    elif(backend == 'nfs'):
+        for obj in objs:
+            shutil.copyfile(obj[1], config['MODULE_LOCAL_STORAGE'] + obj[0])
+
     print('Metadata/Module changed and uploaded')
 
 
@@ -192,6 +201,8 @@ def create_dataset(sessionconfig, params):
             objs.append(('/modules/sqlite.db', config['DB_LOCATION']))
         elif(config['BACKEND'] == 'swift'):
             objs.append(('sqlite.db', config['DB_LOCATION']))
+        elif(config['BACKEND'] == 'nfs'):
+            pass
 
         saveObjsBackend(objs, config['BACKEND'], config)
 
@@ -210,7 +221,7 @@ def create_featureset(sessionconfig, params):
 
     if(analysisMod):  # Check if the module exists
 
-        module_id = analysisMod.id
+        # module_id = analysisMod.id
         checkDataset = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
             params(name=params['name']).first()
 
@@ -247,16 +258,25 @@ def create_relation(sessionconfig, featset, parents):
         objs.append(('/modules/sqlite.db', config['DB_LOCATION']))
     elif(config['BACKEND'] == 'swift'):
         objs.append(('sqlite.db', config['DB_LOCATION']))
+    elif(config['BACKEND'] == 'nfs'):
+        pass
 
     saveObjsBackend(objs, config['BACKEND'], config)
 
 
-def delete_item(filepath='', localpath=''):
+def delete_item(config, filepath='', localpath=''):
 
-    client = InsecureClient('http://' + socket.gethostname() + ':50070')
-    client.delete(filepath, recursive=True)
+    if(config['BACKEND'] == 'hdfs'):
+        client = InsecureClient('http://' + socket.gethostname() + ':50070')
+        client.delete(filepath, recursive=True)
+    elif(config['BACKEND'] == 'swift'):
+        pass  # To be implemented
 
-    try:
-        os.remove(localpath)
-    except OSError:
-        pass
+    # Deleting modules or datasets from local directories (will also suffice for nfs backend)
+    if(os.path.isdir(localpath)):  # Check if it is a dataset
+        shutil.rmtree(localpath)
+    else:
+        try:
+            os.remove(localpath)
+        except OSError:
+            pass
