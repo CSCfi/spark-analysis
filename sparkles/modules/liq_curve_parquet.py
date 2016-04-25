@@ -74,9 +74,9 @@ def rdd_to_dataframe(sqlContext, rdd, curve):
 
 
 # Save the data as parquet
-def saveResult(configpath, dfRdd, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+def saveResult(configstr, dfRdd, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
-    saveFeatures(configpath, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
+    saveFeatures(configstr, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
 
 
 def main():
@@ -121,7 +121,7 @@ def main():
     details = str(features['details'])
     featureset_name = str(features['featureset_name'])
     modulename = str(features['modulename'])
-    configpath = str(features['configpath'])
+    configstr = str(features['configstr'])
 
     tablename = str(params['tablename'])
 
@@ -171,7 +171,7 @@ def main():
 
     parent_datasets = []
     parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
-    saveResult(configpath, df_total, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)  # Notice we pass here the dataframe not rdd because we have already created it
+    saveResult(configstr, df_total, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)  # Notice we pass here the dataframe not rdd because we have already created it
 
     for k in df_total.collect():  # Print out the results
         print(k)

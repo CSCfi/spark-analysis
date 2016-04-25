@@ -10,20 +10,25 @@ from tempfile import NamedTemporaryFile
 from utils.helper import saveDataset   # If you added a file in sc in above step then import it for usage
 import json
 import argparse
+import subprocess
+import socket
 
 
-def add_all_dates(originalpath):
+def add_all_dates(config, originalpath):
 
-    hfile = NamedTemporaryFile(delete=False, dir='/shared_data/sparkles/tmp')
+    sparkles_tmp_dir = config['SPARKLES_TMP_DIR']
+    hfile = NamedTemporaryFile(delete=False, dir=sparkles_tmp_dir)
     with h5py.File(originalpath) as curr_file:
             filekeys = curr_file.keys()
             for k in filekeys:
                 print>>hfile, k
     hfile.close()
+    subprocess.check_call(['hdfs', 'dfs', '-copyFromLocal', '-f', hfile.name, sparkles_tmp_dir])  # Copy the temporary file to HDFS
+    os.unlink(hfile.name)
     return hfile
 
 
-def orders_sql(configpath, orders, sqlContext, userdatadir, originalpath, description, details):
+def orders_sql(configstr, orders, sqlContext, userdatadir, originalpath, description, details):
 
     schemaString_orders = "id ref ob_id created destroyed side price quantity is_round past_id new_id p_id"
 
@@ -46,10 +51,10 @@ def orders_sql(configpath, orders, sqlContext, userdatadir, originalpath, descri
     # for (id, price, side) in results.collect():
     #    print(price)
 
-    saveDataset(configpath, schemaOrders, userdatadir, "orders", originalpath, description, details)
+    saveDataset(configstr, schemaOrders, userdatadir, "orders", originalpath, description, details)
 
 
-def cancels_sql(configpath, cancels, sqlContext, userdatadir, originalpath, description, details):
+def cancels_sql(configstr, cancels, sqlContext, userdatadir, originalpath, description, details):
 
     schemaString_cancels = "id past_id new_id ob_id timestamp side price quantity"
     fields_cancels = []
@@ -62,10 +67,10 @@ def cancels_sql(configpath, cancels, sqlContext, userdatadir, originalpath, desc
     schema_cancels = StructType(fields_cancels)
     schemaCancels = sqlContext.createDataFrame(cancels, schema_cancels)
     # schemaCancels.saveAsParquetFile("files/cancels_name.parquet")
-    saveDataset(configpath, schemaCancels, userdatadir, "cancels", originalpath, description, details)
+    saveDataset(configstr, schemaCancels, userdatadir, "cancels", originalpath, description, details)
 
 
-def trades_sql(configpath, trades, sqlContext, userdatadir, originalpath, description, details):
+def trades_sql(configstr, trades, sqlContext, userdatadir, originalpath, description, details):
 
     schemaString_trades = "id ref o_id ob_id timestamp side quantity price p_id cp_id"
     fields_trades = []
@@ -78,7 +83,7 @@ def trades_sql(configpath, trades, sqlContext, userdatadir, originalpath, descri
     schema_trades = StructType(fields_trades)
     schemaTrades = sqlContext.createDataFrame(trades, schema_trades)
     # schemaTrades.saveAsParquetFile("files/trades_name.parquet")
-    saveDataset(configpath, schemaTrades, userdatadir, "trades", originalpath, description, details)
+    saveDataset(configstr, schemaTrades, userdatadir, "trades", originalpath, description, details)
 
 
 def import_hdf5(x, originalpath, table):
@@ -105,7 +110,7 @@ def main():
     parser.add_argument("description", type=str)
     parser.add_argument("details", type=str)
     parser.add_argument("userdatadir", type=str)
-    parser.add_argument("configpath", type=str)
+    parser.add_argument("configstr", type=str)
     parser.add_argument("partitions", type=int)
 
     args = parser.parse_args()
@@ -132,12 +137,15 @@ def main():
     details = args.details
 
     userdatadir = args.userdatadir
-    configpath = args.configpath
+    configstr = args.configstr
+    config = json.loads(configstr)
 
     for originalpath in originalpaths:
-        hfile = add_all_dates(originalpath)
+        hfile = add_all_dates(config, originalpath)
 
-        raw_file = sc.textFile('file://' + hfile.name, partitions)
+        # raw_file = sc.textFile('file://' + hfile.name, partitions)
+        raw_file = sc.textFile('hdfs://' + socket.gethostname() + ':' + str(config['HADOOP_RPC_PORT']) + hfile.name, partitions)
+
         rdd1 = raw_file.flatMap(lambda x: import_hdf5(x, originalpath, "ORDERS"))
         rdd1 = rdd1.map(numpy_to_native)
 
@@ -150,10 +158,10 @@ def main():
         # print(rdd1.count())
 
         sqlContext = SQLContext(sc)
-        orders_sql(configpath, rdd1, sqlContext, userdatadir, originalpath, description, details)
-        cancels_sql(configpath, rdd2, sqlContext, userdatadir, originalpath, description, details)
-        trades_sql(configpath, rdd3, sqlContext, userdatadir, originalpath, description, details)
-        os.unlink(hfile.name)
+        orders_sql(configstr, rdd1, sqlContext, userdatadir, originalpath, description, details)
+        cancels_sql(configstr, rdd2, sqlContext, userdatadir, originalpath, description, details)
+        trades_sql(configstr, rdd3, sqlContext, userdatadir, originalpath, description, details)
+        # os.unlink(hfile.name)
 
 
 if __name__ == '__main__':

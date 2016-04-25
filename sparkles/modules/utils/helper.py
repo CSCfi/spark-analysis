@@ -12,9 +12,9 @@ from sqlalchemy import text
 from swiftclient.service import SwiftService, SwiftUploadObject
 import shutil
 import json
-import hdfs
-from hdfs import InsecureClient
 import socket
+from snakebite.client import Client
+import subprocess
 
 
 def import_hdf5(x, filepath, table):
@@ -24,7 +24,7 @@ def import_hdf5(x, filepath, table):
         return list(data[:])
 
 
-def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, description, details):
+def saveDataset(configstr, dataframe, userdatadir, tablename, originalpath, description, details):
 
     p = re.compile('.+/(\w+)\.\w+')
     m = p.match(originalpath)
@@ -33,7 +33,7 @@ def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, des
     created = datetime.now()
     user = getpass.getuser()
 
-    filedir = userdatadir + '/' + filename
+    filedir = userdatadir + filename  # This assumes you already have a trailing forward slash in the userdatadir parameter
     tablepath = filedir + '/' + filename + '_' + tablename + '.parquet'
 
     schema = str(dataframe.dtypes)
@@ -54,14 +54,14 @@ def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, des
     except Exception as e:
         raise RuntimeError(e)
 
-    if(tablename == "orders"):
-        sessionconfig = config_session(configpath)
+    if(tablename == "orders"):  # done to save the metadata right after orders table is saved so that there's some info even if the next tables face any problems while exporting
+        sessionconfig = config_session(configstr)
         create_dataset(sessionconfig, params)
 
 
-def saveFeatures(configpath, dataframe, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+def saveFeatures(configstr, dataframe, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
-    filepath = userdatadir + '/' + featureset_name + ".parquet"
+    filepath = userdatadir + featureset_name + ".parquet"  # This assumes you already have a trailing forward slash in the userdatadir parameter
     created = datetime.now()
     user = getpass.getuser()
 
@@ -86,40 +86,32 @@ def saveFeatures(configpath, dataframe, userdatadir, featureset_name, descriptio
     except Exception as e:
         raise RuntimeError(e)
 
-    sessionconfig = config_session(configpath)
+    sessionconfig = config_session(configstr)
     create_featureset(sessionconfig, params)
     create_relation(sessionconfig, featureset_name, parent_datasets)
 
 
-def config_session(configpath):
+def config_session(configstr):
 
-    config = None
-    with open(configpath, 'r') as config_file:
-        config = yaml.load(config_file)
-
-    dburi = config['DATABASE_URI']
+    config = json.loads(configstr)
+    dburi = config['METADATA_URI']
     session = config_to_db_session(dburi, Base)
     return (session, config)
 
 
-def getObjsBackend(objs, backend):
+def getObjsBackend(objs, backend, config):
 
     if(backend == 'hdfs'):
 
-        client = InsecureClient('http://' + socket.gethostname() + ':50070')
+        client = Client(socket.gethostname(), config['HADOOP_RPC_PORT'], use_trash=False)
 
         for obj in objs:
-            retry = 0
-            while(retry < 10):
                 try:
-                    client.download(obj[0], obj[1], overwrite=False)
-                except hdfs.util.HdfsError as e:
-                    print(str(e))
-                    if(len(str(e)) < 1000):
-                        break
-                    if(retry == 10 and len(str(e)) > 1000):
-                        raise RuntimeError(e)
-                retry = retry + 1
+                    copy_gen = client.copyToLocal([obj[0]], obj[1])
+                    for copy_item in copy_gen:
+                        pass
+                except Exception as e:
+                        print(e)
     elif(backend == 'swift'):
 
         options = {'os_auth_url': os.environ['OS_AUTH_URL'], 'os_username': os.environ['OS_USERNAME'], 'os_password': os.environ['OS_PASSWORD'], 'os_tenant_id': os.environ['OS_TENANT_ID'], 'os_tenant_name': os.environ['OS_TENANT_NAME']}
@@ -151,13 +143,12 @@ def getObjsBackend(objs, backend):
 def saveObjsBackend(objs, backend, config):
 
     if(backend == 'hdfs'):
-        client = InsecureClient('http://' + socket.gethostname() + ':50070')
-        client.makedirs('/modules')
         for obj in objs:
             try:
-                client.upload(obj[0], obj[1], overwrite=True)
+                # obj[0] is hdfs path and obj[1] is local filesystem path
+                subprocess.check_call(['hdfs', 'dfs', '-copyFromLocal', '-f', obj[1], obj[0]])
             except Exception as e:
-                shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
+                shutil.copyfile(config['BACKUP_METADATA_LOCAL_PATH'], config['METADATA_LOCAL_PATH'])
                 raise RuntimeError(e)
 
     elif(backend == 'swift'):
@@ -170,12 +161,12 @@ def saveObjsBackend(objs, backend, config):
             swiftUpload = swiftService.upload(container='containerModules', objects=objects)
             for uploaded in swiftUpload:
                 if("error" in uploaded.keys()):
-                    shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
+                    shutil.copyfile(config['BACKUP_METADATA_LOCAL_PATH'], config['METADATA_LOCAL_PATH'])
                     raise RuntimeError(uploaded['error'])
 
     elif(backend == 'nfs'):
         for obj in objs:
-            shutil.copyfile(obj[1], config['MODULE_LOCAL_STORAGE'] + obj[0])
+            shutil.copyfile(obj[1], config['MODULES_DIR'] + obj[0])
 
     print('Metadata/Module changed and uploaded')
 
@@ -191,16 +182,16 @@ def create_dataset(sessionconfig, params):
     if(checkDataset is None):
 
         dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
-        shutil.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
+        shutil.copyfile(config['METADATA_LOCAL_PATH'], config['BACKUP_METADATA_LOCAL_PATH'])
 
         session.add(dataset)
         session.commit()
 
         objs = []
         if(config['BACKEND'] == 'hdfs'):
-            objs.append(('/modules/sqlite.db', config['DB_LOCATION']))
+            objs.append((config['MODULES_DIR'] + 'sqlite.db', config['METADATA_LOCAL_PATH']))
         elif(config['BACKEND'] == 'swift'):
-            objs.append(('sqlite.db', config['DB_LOCATION']))
+            objs.append(('sqlite.db', config['METADATA_LOCAL_PATH']))
         elif(config['BACKEND'] == 'nfs'):
             pass
 
@@ -227,7 +218,7 @@ def create_featureset(sessionconfig, params):
 
         if(checkDataset is None):
             dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id)
-            shutil.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
+            shutil.copyfile(config['METADATA_LOCAL_PATH'], config['BACKUP_METADATA_LOCAL_PATH'])
 
             session.add(dataset)
             session.commit()
@@ -255,9 +246,9 @@ def create_relation(sessionconfig, featset, parents):
     session.commit()
     objs = []
     if(config['BACKEND'] == 'hdfs'):
-        objs.append(('/modules/sqlite.db', config['DB_LOCATION']))
+        objs.append((config['MODULES_DIR'] + 'sqlite.db', config['METADATA_LOCAL_PATH']))
     elif(config['BACKEND'] == 'swift'):
-        objs.append(('sqlite.db', config['DB_LOCATION']))
+        objs.append(('sqlite.db', config['METADATA_LOCAL_PATH']))
     elif(config['BACKEND'] == 'nfs'):
         pass
 
@@ -267,8 +258,10 @@ def create_relation(sessionconfig, featset, parents):
 def delete_item(config, filepath='', localpath=''):
 
     if(config['BACKEND'] == 'hdfs'):
-        client = InsecureClient('http://' + socket.gethostname() + ':50070')
-        client.delete(filepath, recursive=True)
+        client = Client(socket.gethostname(), config['HADOOP_RPC_PORT'], use_trash=False)
+        del_gen = client.delete([filepath], recurse=True)
+        for del_item in del_gen:
+            pass
     elif(config['BACKEND'] == 'swift'):
         pass  # To be implemented
 

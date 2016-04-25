@@ -12,8 +12,6 @@ import json
 import warnings
 import shutil
 import socket
-from hdfs import InsecureClient
-import hdfs
 import re
 from urlparse import urlparse
 
@@ -27,23 +25,25 @@ class SparkRunner(object):
             config = yaml.load(config_file)
 
         self.backend = config['BACKEND']  # Choose the backend from hdfs or swift
-        out_file = config['DB_LOCATION']  # Where to store the metadata on local system
+        out_file = config['METADATA_LOCAL_PATH']  # Where to store the metadata on local system
         objs = []
         if(self.backend == 'hdfs'):
-            objs.append(('/modules/sqlite.db', out_file))
+            objs.append((config['MODULES_DIR'] + 'sqlite.db', out_file))
         elif(self.backend == 'swift'):
             objs.append('sqlite.db', out_file)
         elif(self.backend == 'nfs'):
             pass  # Metadata already in right local dir
 
-        getObjsBackend(objs, self.backend)
+        getObjsBackend(objs, self.backend, config)
 
-        dburi = config['DATABASE_URI']
-        self.clusterUrl = "spark://" + socket.gethostname() + ':' + config['CLUSTER_PORT']
+        dburi = config['METADATA_URI']
+        self.clusterUrl = config['CLUSTER_URL']
         self.session = config_to_db_session(dburi, Base)
         self.config = config
-        self.configpath = configpath
-        self.hdfsmodpath = '/modules/'
+        self.configstr = json.dumps(config)
+        self.hdfsmodpath = config['MODULES_DIR']
+        self.backup_metadata_path = config['BACKUP_METADATA_LOCAL_PATH']
+        self.hadoop_port = config['HADOOP_RPC_PORT']
 
     def list_modules(self, prefix=''):
 
@@ -89,17 +89,17 @@ class SparkRunner(object):
 
         if(checkMod is None):
             analysisMod = Analysis(name=name, filepath=filename, description=description, details=details, created=created, user=user, parameters=params, inputs=inputs, outputs=outputs)
-            shutil.copyfile(self.config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')  # Backup metadata
+            shutil.copyfile(self.config['METADATA_LOCAL_PATH'], self.backup_metadata_path)  # Backup metadata
 
             self.session.add(analysisMod)
             self.session.commit()
             # Upload the metadata and module to swift
             objs = []
             if(self.backend == 'hdfs'):
-                objs.append((self.hdfsmodpath, self.config['DB_LOCATION']))
+                objs.append((self.hdfsmodpath, self.config['METADATA_LOCAL_PATH']))
                 objs.append((self.hdfsmodpath, filepath))
             elif(self.backend == 'swift'):
-                objs.append(('sqlite.db', self.config['DB_LOCATION']))
+                objs.append(('sqlite.db', self.config['METADATA_LOCAL_PATH']))
                 objs.append((filename, filepath))
             elif(self.backend == 'nfs'):
                 objs.append((filename, filepath))  # Send only the module
@@ -124,8 +124,8 @@ class SparkRunner(object):
                 filepaths = ''
                 filepathsarr = []
 
-                # Download the module from swift first
-                out_file = self.config['MODULE_LOCAL_STORAGE'] + analysisMod.filepath
+                # Download the module from Storage first
+                out_file = self.config['MODULES_DIR'] + analysisMod.filepath
 
                 objs = []
 
@@ -136,7 +136,7 @@ class SparkRunner(object):
                 elif(self.config['BACKEND'] == 'nfs'):
                     pass
 
-                getObjsBackend(objs, self.backend)  # Act acciording to the backend choice
+                getObjsBackend(objs, self.backend, self.config)  # Act acciording to the backend choice
 
                 for inputfile in inputs:
                     dataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
@@ -155,19 +155,19 @@ class SparkRunner(object):
                 shuffle_partitions = str(self.config['SHUFFLE_PARTITIONS'])
 
                 if(features is None):
-                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.clusterUrl, self.backend, helperpath, params, filepaths])
+                    call([self.config['PYSPARK_CLIENT_PATH'], out_file, "--master", self.clusterUrl, self.backend, helperpath, params, filepaths])
                 else:  # When there's a featureset to be saved from the module
                     if('userdatadir' not in features):
                         if(self.backend == 'hdfs'):
-                            features['userdatadir'] = 'hdfs://' + socket.gethostname() + ':9000' + '/features'
+                            features['userdatadir'] = 'hdfs://' + socket.gethostname() + ':' + str(self.hadoop_port) + self.config['FEATURES_DIR']
                         elif(self.backend == 'swift'):
                             features['userdatadir'] = 'swift://containerFeatures.SparkTest'
                         elif(self.backend == 'nfs'):
-                            features['userdatadir'] = 'file://' + self.config['FEATURES_LOCAL_STORAGE']
+                            features['userdatadir'] = 'file://' + self.config['FEATURES_DIR']
 
-                    features['configpath'] = self.configpath  # The configpath is passed as a default parameter
+                    features['configstr'] = self.configstr  # The configstr is passed as a default parameter
                     features = json.dumps(features)
-                    call(["/opt/spark/bin/pyspark", out_file, "--master", self.clusterUrl, self.backend, helperpath, shuffle_partitions, params, filepaths, features])
+                    call([self.config['PYSPARK_CLIENT_PATH'], out_file, "--master", self.clusterUrl, self.backend, helperpath, shuffle_partitions, params, filepaths, features])
 
             else:
                 raise RuntimeError("Analysis module not found")
@@ -182,18 +182,18 @@ class SparkRunner(object):
 
             if(not userdatadir):
                 if(self.backend == 'hdfs'):
-                    userdatadir = 'hdfs://' + socket.gethostname() + ':9000' + '/files'
+                    userdatadir = 'hdfs://' + socket.gethostname() + ':' + str(self.hadoop_port) + self.config['FILES_DIR']
                 elif(self.backend == 'swift'):
                     userdatadir = 'swift://containerFiles.SparkTest'
                 elif(self.backend == 'nfs'):
-                    userdatadir = 'file://' + self.config['FILES_LOCAL_STORAGE']
+                    userdatadir = 'file://' + self.config['FILES_DIR']
 
             path = dirname(dirname(os.path.abspath(__file__)))
-            configpath = self.configpath
+            configstr = self.configstr
             originalpaths = json.dumps(inputfiles)
             partitions = str(self.config['IMPORT_PARTITIONS'])
 
-            call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.clusterUrl, self.backend, originalpaths, description, details, userdatadir, configpath, partitions])
+            call([self.config['PYSPARK_CLIENT_PATH'], path + "/data_import.py", "--master", self.clusterUrl, self.backend, originalpaths, description, details, userdatadir, configstr, partitions])
 
         else:
             raise RuntimeError("Please ensure inputfiles is not None or empty")
@@ -206,17 +206,20 @@ class SparkRunner(object):
 
             analysisMod = self.session.query(Analysis).filter_by(name=modulename).first()
 
-            localpath = self.config['MODULE_LOCAL_STORAGE'] + analysisMod.filepath
-            if(self.config['BACKEND'] == 'hdfs'):
-                delete_item(self.config, filepath='/modules/' + analysisMod.filepath, localpath=localpath)
-            elif(self.config['BACKEND'] == 'swift'):
-                pass  # To be implemented
-            elif(self.config['BACKEND'] == 'nfs'):
-                delete_item(self.config, localpath=localpath)  # Only local dirs required in nfs
+            if analysisMod:
+                localpath = self.config['MODULES_DIR'] + analysisMod.filepath
+                if(self.config['BACKEND'] == 'hdfs'):
+                    delete_item(self.config, filepath=self.config['MODULES_DIR'] + analysisMod.filepath, localpath=localpath)
+                elif(self.config['BACKEND'] == 'swift'):
+                    pass  # To be implemented
+                elif(self.config['BACKEND'] == 'nfs'):
+                    delete_item(self.config, localpath=localpath)  # Only local dirs required in nfs
 
-            self.session.delete(analysisMod)
-            self.session.commit()
-            print('Module deleted')
+                self.session.delete(analysisMod)
+                self.session.commit()
+                print('Module deleted')
+            else:
+                raise RuntimeError('Module does not exist')
 
     def drop_dataset(self, datasetname=''):
 
@@ -225,16 +228,18 @@ class SparkRunner(object):
         else:
 
             dataset = self.session.query(Dataset).filter_by(name=datasetname).first()
+            if dataset:
+                if(self.config['BACKEND'] == 'hdfs'):
+                    u = urlparse(dataset.filepath)
+                    delete_item(self.config, filepath=u.path)
+                elif(self.config['BACKEND'] == 'swift'):
+                    pass  # To be implemented
+                elif(self.config['BACKEND'] == 'nfs'):
+                    u = urlparse(dataset.filepath)
+                    delete_item(self.config, localpath=u.path)
 
-            if(self.config['BACKEND'] == 'hdfs'):
-                m = re.match(r'.*(/.*/.*)', dataset.filepath)
-                delete_item(self.config, filepath=m.group(1))
-            elif(self.config['BACKEND'] == 'swift'):
-                pass  # To be implemented
-            elif(self.config['BACKEND'] == 'nfs'):
-                u = urlparse(dataset.filepath)
-                delete_item(self.config, localpath=u.path)
-
-            self.session.delete(dataset)
-            self.session.commit()
-            print('Dataset deleted')
+                self.session.delete(dataset)
+                self.session.commit()
+                print('Dataset deleted')
+            else:
+                raise RuntimeError('Dataset does not exist')

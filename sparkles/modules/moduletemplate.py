@@ -20,7 +20,7 @@ import calendar
 #    return (dt, x)
 
 # This function is used only when you want to save your results as a feature set
-def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+def saveResult(configstr, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
     schemaString = "field1 field2"
 
@@ -33,7 +33,7 @@ def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, descript
 
     schema_rdd = StructType(fields_rdd)
     dfRdd = sqlContext.createDataFrame(x, schema_rdd)
-    saveFeatures(configpath, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
+    saveFeatures(configstr, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
 
 
 # This is the function where you will write your module with logic and implementation
@@ -76,14 +76,14 @@ def your_module_implementation(sc, sqlContext, params=None, inputs=None, feature
     # featureset_name = str(features['featureset_name'])
     # modulename = str(features['modulename'])
 
-    # configpath = str(features['configpath'])  # Automatically supplied, don't change anything
+    # configstr = str(features['configstr'])  # Automatically supplied, don't change anything
 
     # For saving the results to a parquet file
     # Convert the RDD to a dataframe first by defining the schema
 
     # parent_datasets = []
     # parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
-    # saveResult(configpath, rdd1, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
+    # saveResult(configstr, rdd1, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
 
     sc.stop()
 
