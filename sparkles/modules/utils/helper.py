@@ -91,12 +91,9 @@ def saveFeatures(configpath, dataframe, userdatadir, featureset_name, descriptio
     create_relation(sessionconfig, featureset_name, parent_datasets)
 
 
-def config_session(configpath):
+def config_session(configstr):
 
-    config = None
-    with open(configpath, 'r') as config_file:
-        config = yaml.load(config_file)
-
+    config = json.load(configstr)
     dburi = config['DATABASE_URI']
     session = config_to_db_session(dburi, Base)
     return (session, config)
@@ -157,7 +154,7 @@ def saveObjsBackend(objs, backend, config):
             try:
                 client.upload(obj[0], obj[1], overwrite=True)
             except Exception as e:
-                shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
+                shutil.copyfile(config['BACKUP_DB_LOCATION'], config['DB_LOCATION'])
                 raise RuntimeError(e)
 
     elif(backend == 'swift'):
@@ -170,7 +167,7 @@ def saveObjsBackend(objs, backend, config):
             swiftUpload = swiftService.upload(container='containerModules', objects=objects)
             for uploaded in swiftUpload:
                 if("error" in uploaded.keys()):
-                    shutil.copyfile('/shared_data/sparkles/tmp/sqlite_temp.db', config['DB_LOCATION'])
+                    shutil.copyfile(config['BACKUP_DB_LOCATION'], config['DB_LOCATION'])
                     raise RuntimeError(uploaded['error'])
 
     elif(backend == 'nfs'):
@@ -191,7 +188,7 @@ def create_dataset(sessionconfig, params):
     if(checkDataset is None):
 
         dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
-        shutil.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
+        shutil.copyfile(config['DB_LOCATION'], config['BACKUP_DB_LOCATION'])
 
         session.add(dataset)
         session.commit()
@@ -227,7 +224,7 @@ def create_featureset(sessionconfig, params):
 
         if(checkDataset is None):
             dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id)
-            shutil.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
+            shutil.copyfile(config['DB_LOCATION'], config['BACKUP_DB_LOCATION'])
 
             session.add(dataset)
             session.commit()

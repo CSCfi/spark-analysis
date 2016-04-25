@@ -33,7 +33,7 @@ def timetr(x, start_time, interval):
     return (dt, x[1])  # x[1] is the total aggregated count
 
 
-def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+def saveResult(configstr, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
     schemaString = "timestamp count"
 
@@ -46,7 +46,7 @@ def saveResult(configpath, x, sqlContext, userdatadir, featureset_name, descript
 
     schema_rdd = StructType(fields_rdd)
     dfRdd = sqlContext.createDataFrame(x, schema_rdd)
-    saveFeatures(configpath, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
+    saveFeatures(configstr, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
 
 
 def main():
@@ -91,7 +91,7 @@ def main():
     details = str(features['details'])
     featureset_name = str(features['featureset_name'])
     modulename = str(features['modulename'])
-    configpath = str(features['configpath'])
+    configstr = str(features['configstr'])
 
     tablename = str(params['tablename'])
 
@@ -121,7 +121,7 @@ def main():
 
     parent_datasets = []
     parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
-    saveResult(configpath, rdd, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
+    saveResult(configstr, rdd, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
 
     print(rdd.collect())
 

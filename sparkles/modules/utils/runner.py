@@ -39,11 +39,12 @@ class SparkRunner(object):
         getObjsBackend(objs, self.backend)
 
         dburi = config['DATABASE_URI']
-        self.clusterUrl = "spark://" + socket.gethostname() + ':' + config['CLUSTER_PORT']
+        self.clusterUrl = config['CLUSTER_URL']
         self.session = config_to_db_session(dburi, Base)
         self.config = config
-        self.configpath = configpath
+        self.configstr = json.dumps(config)
         self.hdfsmodpath = '/modules/'
+        self.backup_metadata_path = config['BACKUP_DB_LOCATION']
 
     def list_modules(self, prefix=''):
 
@@ -89,7 +90,7 @@ class SparkRunner(object):
 
         if(checkMod is None):
             analysisMod = Analysis(name=name, filepath=filename, description=description, details=details, created=created, user=user, parameters=params, inputs=inputs, outputs=outputs)
-            shutil.copyfile(self.config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')  # Backup metadata
+            shutil.copyfile(self.config['DB_LOCATION'], self.backup_metadata_path)  # Backup metadata
 
             self.session.add(analysisMod)
             self.session.commit()
@@ -165,7 +166,7 @@ class SparkRunner(object):
                         elif(self.backend == 'nfs'):
                             features['userdatadir'] = 'file://' + self.config['FEATURES_LOCAL_STORAGE']
 
-                    features['configpath'] = self.configpath  # The configpath is passed as a default parameter
+                    features['configstr'] = self.configstr  # The configstr is passed as a default parameter
                     features = json.dumps(features)
                     call(["/opt/spark/bin/pyspark", out_file, "--master", self.clusterUrl, self.backend, helperpath, shuffle_partitions, params, filepaths, features])
 
@@ -189,11 +190,11 @@ class SparkRunner(object):
                     userdatadir = 'file://' + self.config['FILES_LOCAL_STORAGE']
 
             path = dirname(dirname(os.path.abspath(__file__)))
-            configpath = self.configpath
+            configstr = self.configstr
             originalpaths = json.dumps(inputfiles)
             partitions = str(self.config['IMPORT_PARTITIONS'])
 
-            call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.clusterUrl, self.backend, originalpaths, description, details, userdatadir, configpath, partitions])
+            call(["/opt/spark/bin/pyspark", path + "/data_import.py", "--master", self.clusterUrl, self.backend, originalpaths, description, details, userdatadir, configstr, partitions])
 
         else:
             raise RuntimeError("Please ensure inputfiles is not None or empty")
