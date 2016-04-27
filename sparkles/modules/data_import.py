@@ -14,7 +14,8 @@ import argparse
 
 def add_all_dates(configstr, originalpath):
 
-    sparkles_tmp_dir = configstr['SPARKLES_TMP_DIR']
+    config = json.loads(configstr)
+    sparkles_tmp_dir = config['SPARKLES_TMP_DIR']
     hfile = NamedTemporaryFile(delete=False, dir=sparkles_tmp_dir)
     with h5py.File(originalpath) as curr_file:
             filekeys = curr_file.keys()

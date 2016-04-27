@@ -24,7 +24,7 @@ def import_hdf5(x, filepath, table):
         return list(data[:])
 
 
-def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, description, details):
+def saveDataset(configstr, dataframe, userdatadir, tablename, originalpath, description, details):
 
     p = re.compile('.+/(\w+)\.\w+')
     m = p.match(originalpath)
@@ -55,11 +55,11 @@ def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, des
         raise RuntimeError(e)
 
     if(tablename == "orders"):
-        sessionconfig = config_session(configpath)
+        sessionconfig = config_session(configstr)
         create_dataset(sessionconfig, params)
 
 
-def saveFeatures(configpath, dataframe, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+def saveFeatures(configstr, dataframe, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
 
     filepath = userdatadir + '/' + featureset_name + ".parquet"
     created = datetime.now()
@@ -86,14 +86,14 @@ def saveFeatures(configpath, dataframe, userdatadir, featureset_name, descriptio
     except Exception as e:
         raise RuntimeError(e)
 
-    sessionconfig = config_session(configpath)
+    sessionconfig = config_session(configstr)
     create_featureset(sessionconfig, params)
     create_relation(sessionconfig, featureset_name, parent_datasets)
 
 
 def config_session(configstr):
 
-    config = json.load(configstr)
+    config = json.loads(configstr)
     dburi = config['DATABASE_URI']
     session = config_to_db_session(dburi, Base)
     return (session, config)
