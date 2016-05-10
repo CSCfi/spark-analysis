@@ -14,80 +14,38 @@ import time
 import calendar
 
 
-# A General dummy function to be used in Map , it transforms the epoch time into human readable format
-# def timetr(x):
-#    dt = datetime.fromtimestamp(x.timefield).strftime('%Y-%m-%d %H:%M:%S.%f')
-#    return (dt, x)
+# This is the function where you will write your module with logic and implementation
+def module_implementation(sc, sqlContext, params=None, inputs=None, features=None):
 
-# This function is used only when you want to save your results as a feature set
-def saveResult(configstr, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+    filepath = str(inputs[0])  # If you are working with one dataset then just read the first element of the array
+    dataframe = sqlContext.read.parquet(filepath)  # Now you get your dataset as a dataframe here
 
+    dataframe.registerTempTable("tablename")  # Register the table in parquet file for our usage with SQL queries
+    df = sqlContext.sql("SELECT fields from tablename WHERE field_name == criteria")  # A dataframe is returned which can be used as an RDD
+
+    # Once you have df , you can perform transformations and other operations that you want and write down the code here
+    # rdd = df.map(lambda x: x) just an example
+    # More code here.....
+
+    # Once you have written your code, provide the schema here to generate the resulting dataframe
     schemaString = "field1 field2"
 
-    fields_rdd = []
+    fields_df = []
     for field_name in schemaString.split():
         if(field_name == 'field1'):
-            fields_rdd.append(StructField(field_name, IntegerType(), True))
+            fields_df.append(StructField(field_name, IntegerType(), True))
         else:
-            fields_rdd.append(StructField(field_name, StringType(), True))
+            fields_df.append(StructField(field_name, StringType(), True))
 
-    schema_rdd = StructType(fields_rdd)
-    dfRdd = sqlContext.createDataFrame(x, schema_rdd)
-    saveFeatures(configstr, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
+    schema_df = StructType(fields_df)
+    feature_dataframe = sqlContext.createDataFrame(rdd, schema_df)  # Dataframe for featureset created here
 
-
-# This is the function where you will write your module with logic and implementation
-def your_module_implementation(sc, sqlContext, params=None, inputs=None, features=None):
-
-    tablename = str(params['tablename'])  # Mandatory parameter
-
-    # The time would be provided by user as a string in this format "2011-12-29_14:43:47:141", we need to convert into epoch times for working
-
-    # start_time_str = str(params['start_time'])
-    # start_time = int(str(calendar.timegm(time.strptime( start_time_str[:-4],'%Y-%m-%d_%H:%M:%S'))) + start_time_str[-3:])  # convert to epoch
-
-    # end_time_str = str(params['end_time'])
-    # end_time = int(str(calendar.timegm(time.strptime( end_time_str[:-4],'%Y-%m-%d_%H:%M:%S'))) + end_time_str[-3:])  # convert to epoch
-
-    # interval = float(params['interval'])
-
-    filepath = str(inputs[0])  # Provide the complete path
-    filename = os.path.basename(os.path.abspath(filepath))  # Don't change
-    tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'  # Don't change
-
-    rdd = sqlContext.read.parquet(tablepath)
-    rdd.registerTempTable("tablename")  # Register the table in parquet file for our usage with SQL queries
-    rdd = sqlContext.sql("SELECT fields from tablename WHERE field_name == criteria")  # A dataframe is returned which can be used as an RDD
-
-    # rdd1 = rdd.filter(rdd.somefieldname == somecriteria)  # Example of filtering
-    # rdd1 = rdd1.map(somemapfunction)  # Applying transformation to the RDD by passing custom functions to map
-    # rdd1 = rdd1.reduceByKey(somereducefunction)  # For performing sum or average of the results
-    # rdd1 = rdd1.groupByKey()  # Useful for grouping the results by key
-    # rdd1 = rdd1.map(timetr)  # If you need human readable time
-
-    # d = rdd.collect()  #Collect the results before displaying
-    # for k in d:  # Print out the results
-    #    print(k)
-
-    # If you need to save the results as feature set use this parameters as well
-    # userdatadir = str(features['userdatadir'])
-    # description = str(features['description'])
-    # details = str(features['details'])
-    # featureset_name = str(features['featureset_name'])
-    # modulename = str(features['modulename'])
-
-    # configstr = str(features['configstr'])  # Automatically supplied, don't change anything
-
-    # For saving the results to a parquet file
-    # Convert the RDD to a dataframe first by defining the schema
-
-    # parent_datasets = []
-    # parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
-    # saveResult(configstr, rdd1, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
-
+    # Don't change the lines below
+    saveFeatures(feature_dataframe, features, params, inputs)  # Just pass the feature_dataframe which you generated for your results to this function. (features, params, inputs remain as it is)
     sc.stop()
 
 
+# This is the main function which you do not have to modify!
 def main():
 
     # Configure Spark
@@ -132,7 +90,7 @@ def main():
     sqlContext.setConf("spark.sql.shuffle.partitions", shuffle_partitions)  # Don't change, required for controlling parallelism
 
     # Pass the sc (Spark Context) and sqlContext along with the different paramters and inputs.
-    your_module_implementation(sc, sqlContext, params=params, inputs=inputs, features=features)
+    module_implementation(sc, sqlContext, params=params, inputs=inputs, features=features)
 
 if __name__ == "__main__":
     main()

@@ -11,4 +11,4 @@ requests==2.2.1
 SQLAlchemy==1.0.4
 python-swiftclient==2.4.0
 mock==1.3.0
-hdfs==2.0.2
+snakebite==2.8.2

@@ -33,7 +33,8 @@ setup(
         #   3 - Alpha
         #   4 - Beta
         #   5 - Production/Stable
-        'Development Status :: 3 - Alpha',
+        # 'Development Status :: 3 - Alpha',
+          'Production Status :: 5 - Stable',
 
         # Indicate who your project is intended for
         'Intended Audience :: Developers',

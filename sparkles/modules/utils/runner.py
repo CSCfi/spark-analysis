@@ -21,6 +21,9 @@ class SparkRunner(object):
     def __init__(self, configpath=None):
 
         config = None
+        if not configpath:
+            configpath = '/sparkles/etc/config.yml'
+
         with open(configpath, 'r') as config_file:
             config = yaml.load(config_file)
 

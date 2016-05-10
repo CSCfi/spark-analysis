@@ -33,22 +33,6 @@ def timetr(x, start_time, interval):
     return (dt, x[1])  # x[1] is the total aggregated count
 
 
-def saveResult(configstr, x, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
-
-    schemaString = "timestamp count"
-
-    fields_rdd = []
-    for field_name in schemaString.split():
-        if(field_name == 'count'):
-            fields_rdd.append(StructField(field_name, IntegerType(), True))
-        else:
-            fields_rdd.append(StructField(field_name, LongType(), True))
-
-    schema_rdd = StructType(fields_rdd)
-    dfRdd = sqlContext.createDataFrame(x, schema_rdd)
-    saveFeatures(configstr, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
-
-
 def main():
     conf = SparkConf()
     conf.setAppName("Parquet Count 60")
@@ -93,8 +77,6 @@ def main():
     modulename = str(features['modulename'])
     configstr = str(features['configstr'])
 
-    tablename = str(params['tablename'])
-
     start_time_str = str(params['start_time'])
     start_time = int(str(calendar.timegm(time.strptime(start_time_str[:-4], '%Y-%m-%d_%H:%M:%S'))) + start_time_str[-3:])  # convert to epoch
 
@@ -104,24 +86,32 @@ def main():
     interval = float(params['interval'])
 
     filepath = str(inputs[0])  # Provide the complete path
-    filename = os.path.basename(os.path.abspath(filepath))
-    tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
 
     sqlContext = SQLContext(sc)
     sqlContext.setConf("spark.sql.shuffle.partitions", shuffle_partitions)
 
-    df = sqlContext.read.parquet(tablepath)
+    df = sqlContext.read.parquet(filepath)
 
-    df.registerTempTable(tablename)
-    df = sqlContext.sql("SELECT created FROM " + tablename + " WHERE created <" + str(end_time) + " AND created >=" + str(start_time))
+    df.registerTempTable('ORDERS')
+    df = sqlContext.sql("SELECT created FROM ORDERS WHERE created <" + str(end_time) + " AND created >=" + str(start_time))
 
     rdd = df.map(lambda x: keymod(x, start_time, interval)).reduceByKey(add)
     rdd = rdd.sortByKey()
     rdd = rdd.map(lambda x: timetr(x, start_time, interval))  # Human readable time
 
-    parent_datasets = []
-    parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
-    saveResult(configstr, rdd, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)
+    # Generate the Schema for the feature dataframe
+    schemaString = "timestamp count"
+
+    fields_df = []
+    for field_name in schemaString.split():
+        if(field_name == 'count'):
+            fields_df.append(StructField(field_name, IntegerType(), True))
+        else:
+            fields_df.append(StructField(field_name, LongType(), True))
+
+    schema_rdd = StructType(fields_df)
+    dfRdd = sqlContext.createDataFrame(rdd, schema_rdd)
+    saveFeatures(dfRdd, features, params, inputs)  # Save as a parquet file and create metadata entry
 
     print(rdd.collect())
 

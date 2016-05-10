@@ -73,12 +73,6 @@ def rdd_to_dataframe(sqlContext, rdd, curve):
     return df
 
 
-# Save the data as parquet
-def saveResult(configstr, dfRdd, sqlContext, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
-
-    saveFeatures(configstr, dfRdd, userdatadir, featureset_name, description, details, modulename, json.dumps(module_parameters), json.dumps(parent_datasets))
-
-
 def main():
     conf = SparkConf()
     conf.setAppName("Liq Cost Parquet")
@@ -123,8 +117,6 @@ def main():
     modulename = str(features['modulename'])
     configstr = str(features['configstr'])
 
-    tablename = str(params['tablename'])
-
     start_time_str = str(params['start_time'])
     start_time = int(str(calendar.timegm(time.strptime(start_time_str[:-4], '%Y-%m-%d_%H:%M:%S'))) + start_time_str[-3:])  # convert to epoch
 
@@ -134,16 +126,14 @@ def main():
     interval = int(params['interval'])
 
     filepath = str(inputs[0])  # Provide the complete path
-    filename = os.path.basename(os.path.abspath(filepath))
-    tablepath = filepath + '/' + filename + '_' + str.lower(tablename) + '.parquet'
 
     sqlContext = SQLContext(sc)
     sqlContext.setConf("spark.sql.shuffle.partitions", shuffle_partitions)
 
-    df = sqlContext.read.parquet(tablepath)
+    df = sqlContext.read.parquet(filepath)
 
-    df.registerTempTable(tablename)
-    df = sqlContext.sql("SELECT created, destroyed, side, price, quantity FROM " + tablename + " WHERE created <=" + str(end_time) + " AND destroyed >" + str(start_time))
+    df.registerTempTable('ORDERS')
+    df = sqlContext.sql("SELECT created, destroyed, side, price, quantity FROM ORDERS WHERE created <=" + str(end_time) + " AND destroyed >" + str(start_time))
 
     rdd = df.map(lambda x: transform_zero_destroys(x))
 
@@ -169,9 +159,7 @@ def main():
     df_total = df_total.select(df_buy.timestamp, df_total.curve_buy, df_total.curve_sell)  # Just one timestamp field should be there not two!
     df_total = df_total.sort(df_total.timestamp)
 
-    parent_datasets = []
-    parent_datasets.append(filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
-    saveResult(configstr, df_total, sqlContext, userdatadir, featureset_name, description, details, modulename, params, parent_datasets)  # Notice we pass here the dataframe not rdd because we have already created it
+    saveFeatures(df_total, features, params, inputs)  # Save the featureset
 
     for k in df_total.collect():  # Print out the results
         print(k)

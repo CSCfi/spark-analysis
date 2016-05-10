@@ -7,6 +7,6 @@ class DataframeMock(object):
         return ['field1, field2']
 
     def saveAsParquetFile(self, tablepath):
-        if(tablepath not in ['swift://containerFiles.SparkTest/file/file_orders.parquet', 'swift://containerFeatures.SparkTest/feat.parquet']):
+        if(tablepath not in ['swift://containerFiles.SparkTest/file/file_ORDERS.parquet', 'swift://containerFeatures.SparkTest/feat.parquet']):
             raise RuntimeError('table path error')
         return 'success'

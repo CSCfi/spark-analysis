@@ -1,5 +1,6 @@
 import argparse
 from sparkles.modules.utils.runner import SparkRunner
+import warnings
 
 
 def main():
@@ -8,15 +9,18 @@ def main():
     parser_list = subparsers.add_parser('list_datasets', help='list datasets')
     parser_run = subparsers.add_parser('list_modules', help='list analysis modules')
     parser.add_argument('--prefix')
-    parser.add_argument('--configfile', required=True)
+    parser.add_argument('--configfile')
     args = parser.parse_args()
 
-    if(not args.configfile):
-        raise RuntimeError('Configuration file for Sparkles is required')
+    configfile = args.configfile
+
+    if(not configfile):
+        warnings.warn('Configuration file not provided, searching the default location for the same')
+        configfile = '/sparkles/etc/config.yml'
     if(not args.prefix):
         args.prefix = ''
 
-    sr = SparkRunner(args.configfile)
+    sr = SparkRunner(configfile)
 
     if args.subparser_name == 'list_datasets':
         sr.list_datasets(args.prefix)

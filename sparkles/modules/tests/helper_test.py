@@ -24,17 +24,19 @@ def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, des
 
     p = re.compile('.+/(\w+)\.\w+')
     m = p.match(originalpath)
-    filename = m.group(1)
+    identifier = m.group(1)
+
+    filedir = userdatadir + '/' + identifier  # This assumes you already have a trailing forward slash in the userdatadir parameter
+    filename = identifier + '_' + tablename.upper()
+    tablepath = filedir + '/' + filename + '.parquet'
 
     created = datetime.now()
     user = 'root'
 
-    filedir = userdatadir + '/' + filename
-    tablepath = filedir + '/' + filename + '_' + tablename + '.parquet'
-
     schema = str(dataframe.dtypes)
     params = defaultdict(str)
     params['name'] = filename
+    params['identifier'] = identifier
     params['fileformat'] = 'Parquet'
     params['created'] = created
     params['user'] = user
@@ -50,9 +52,8 @@ def saveDataset(configpath, dataframe, userdatadir, tablename, originalpath, des
     except Exception as e:
         raise RuntimeError(e)
 
-    if(tablename == "orders"):
-        sessionconfig = config_session(configpath)
-        create_dataset(sessionconfig, params)
+    sessionconfig = config_session(configpath)
+    create_dataset(sessionconfig, params)
 
     return 1
 
@@ -116,7 +117,7 @@ def create_dataset(sessionconfig, params):
 
     if(checkDataset is None):
 
-        dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
+        dataset = Dataset(name=params['name'], identifier=params['identifier'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
 
         shutilmock = Mock(spec=shutil)
         shutilmock.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')
@@ -161,7 +162,7 @@ def create_featureset(sessionconfig, params):
         checkDataset = featureQuery(name=params['name'])
 
         if(checkDataset is None):
-            dataset = Mock(spec=Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id))
+            dataset = Mock(spec=Dataset(name=params['name'], identifier='', description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id))
 
             shutilmock = Mock(spec=shutil)
             shutilmock.copyfile(config['DB_LOCATION'], '/shared_data/sparkles/tmp/sqlite_temp.db')

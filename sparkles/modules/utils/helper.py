@@ -28,17 +28,19 @@ def saveDataset(configstr, dataframe, userdatadir, tablename, originalpath, desc
 
     p = re.compile('.+/(\w+)\.\w+')
     m = p.match(originalpath)
-    filename = m.group(1)
+    identifier = m.group(1)
 
     created = datetime.now()
     user = getpass.getuser()
 
-    filedir = userdatadir + filename  # This assumes you already have a trailing forward slash in the userdatadir parameter
-    tablepath = filedir + '/' + filename + '_' + tablename + '.parquet'
+    filedir = userdatadir + identifier  # This assumes you already have a trailing forward slash in the userdatadir parameter
+    filename = identifier + '_' + tablename.upper()
+    tablepath = filedir + '/' + filename + '.parquet'
 
     schema = str(dataframe.dtypes)
     params = defaultdict(str)
     params['name'] = filename
+    params['identifier'] = identifier
     params['fileformat'] = 'Parquet'
     params['created'] = created
     params['user'] = user
@@ -46,7 +48,7 @@ def saveDataset(configstr, dataframe, userdatadir, tablename, originalpath, desc
     params['description'] = description
     params['details'] = details
 
-    params['filepath'] = filedir
+    params['filepath'] = tablepath
     params['schema'] = schema
 
     try:
@@ -54,12 +56,25 @@ def saveDataset(configstr, dataframe, userdatadir, tablename, originalpath, desc
     except Exception as e:
         raise RuntimeError(e)
 
-    if(tablename == "orders"):  # done to save the metadata right after orders table is saved so that there's some info even if the next tables face any problems while exporting
-        sessionconfig = config_session(configstr)
-        create_dataset(sessionconfig, params)
+    sessionconfig = config_session(configstr)
+    create_dataset(sessionconfig, params)
 
 
-def saveFeatures(configstr, dataframe, userdatadir, featureset_name, description, details, modulename, module_parameters, parent_datasets):
+def saveFeatures(dataframe, features, module_parameters, inputs):
+
+    parent_datasets = []
+    for input_item in inputs:
+        input_item_filepath = str(input_item)
+        input_item_filename, file_extension = os.path.splitext(os.path.basename(os.path.abspath(input_item_filepath)))
+        parent_datasets.append(input_item_filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
+
+    userdatadir = str(features['userdatadir'])
+    description = str(features['description'])
+    details = str(features['details'])
+    featureset_name = str(features['featureset_name'])
+    modulename = str(features['modulename'])
+
+    configstr = str(features['configstr'])
 
     filepath = userdatadir + featureset_name + ".parquet"  # This assumes you already have a trailing forward slash in the userdatadir parameter
     created = datetime.now()
@@ -68,6 +83,7 @@ def saveFeatures(configstr, dataframe, userdatadir, featureset_name, description
     schema = str(dataframe.dtypes)
     params = defaultdict(str)
     params['name'] = featureset_name
+    params['identifier'] = ''
     params['fileformat'] = 'Parquet'
     params['created'] = created
     params['user'] = user
@@ -75,8 +91,8 @@ def saveFeatures(configstr, dataframe, userdatadir, featureset_name, description
     params['description'] = description
     params['details'] = details
     params['modulename'] = modulename
-    params['module_parameters'] = module_parameters
-    params['parents'] = parent_datasets
+    params['module_parameters'] = json.dumps(module_parameters)
+    params['parents'] = json.dumps(parent_datasets)
 
     params['filepath'] = filepath
     params['schema'] = schema
@@ -181,7 +197,7 @@ def create_dataset(sessionconfig, params):
 
     if(checkDataset is None):
 
-        dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
+        dataset = Dataset(name=params['name'], identifier=params['identifier'], description=params['description'], details=params['details'], module_parameters='', created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id='')
         shutil.copyfile(config['METADATA_LOCAL_PATH'], config['BACKUP_METADATA_LOCAL_PATH'])
 
         session.add(dataset)
@@ -217,7 +233,7 @@ def create_featureset(sessionconfig, params):
             params(name=params['name']).first()
 
         if(checkDataset is None):
-            dataset = Dataset(name=params['name'], description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id)
+            dataset = Dataset(name=params['name'], identifier='', description=params['description'], details=params['details'], module_parameters=params['module_parameters'], created=params['created'], user=params['user'], fileformat="Parquet", filepath=params['filepath'], schema=params['schema'], module_id=analysisMod.id)
             shutil.copyfile(config['METADATA_LOCAL_PATH'], config['BACKUP_METADATA_LOCAL_PATH'])
 
             session.add(dataset)
@@ -233,10 +249,8 @@ def create_relation(sessionconfig, featset, parents):
 
     session = sessionconfig[0]
     config = sessionconfig[1]
-
     featureset = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
         params(name=featset).first()
-    parents = json.loads(parents)
     for parent in parents:
         dataset = session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
             params(name=parent).first()

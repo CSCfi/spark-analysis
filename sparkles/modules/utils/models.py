@@ -52,6 +52,7 @@ class Dataset(Base):
     id = Column(String(32), primary_key=True)
     name = Column(String(100))
     fileformat = Column(String(32))
+    identifier = Column(String(32))
     description = Column(String(250))
     details = Column(Text())
     filepath = Column(String(500), nullable=False)
@@ -64,10 +65,11 @@ class Dataset(Base):
 
     parents = relationship("Dataset", secondary="fs_to_ds", primaryjoin="Dataset.id==fs_to_ds.c.left_fs_id", secondaryjoin="Dataset.id==fs_to_ds.c.right_ds_id", backref="derived")
 
-    def __init__(self, name, fileformat, description, details, filepath, user, created, module_id, module_parameters, schema):
+    def __init__(self, name, fileformat, identifier, description, details, filepath, user, created, module_id, module_parameters, schema):
         self.id = uuid.uuid4().hex
         self.name = name
         self.fileformat = fileformat
+        self.identifier = identifier
         self.description = description
         self.details = details
         self.filepath = filepath
