@@ -175,6 +175,40 @@ class SparkRunner(object):
             else:
                 raise RuntimeError("Analysis module not found")
 
+    def test_analysis(self, modulepath='', params=None, inputs=None, features=None):
+
+        ''' Tests the given analysis module against the given input datasets and produces the output.
+            It is recommended to run this on local mode with small sized input
+        '''
+
+        if(modulepath is None or params is None or inputs is None):
+            raise RuntimeError("modulepath, params and inputs are necessary")
+        else:
+                filepaths = ''
+                filepathsarr = []
+
+                for inputfile in inputs:
+                    dataset = self.session.query(Dataset).from_statement(text("SELECT * FROM datasets where name=:name")).\
+                        params(name=inputfile).first()
+                    if(dataset):
+                        filepathsarr.append(dataset.filepath)
+
+                if(not filepathsarr):
+                    raise RuntimeError("No datasets found")
+
+                filepaths = json.dumps(filepathsarr)
+                params = json.dumps(params)
+
+                helperpath = dirname(dirname(os.path.abspath(__file__)))
+
+                shuffle_partitions = str(self.config['SHUFFLE_PARTITIONS'])
+
+                if not features:
+                    features = {}
+                features['module_testing'] = True  # Introduce a parameter to keep the system informed that we are testing the module
+                features = json.dumps(features)
+                call([self.config['PYSPARK_CLIENT_PATH'], modulepath, "--master", "local[*]", self.backend, helperpath, shuffle_partitions, params, filepaths, features])
+
     def import_dataset(self, inputfiles=[], description='', details='', userdatadir=''):
 
         ''' Imports a given dataset (on a local path) to the backend which is a Swift object store

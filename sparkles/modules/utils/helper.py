@@ -62,49 +62,50 @@ def saveDataset(configstr, dataframe, userdatadir, tablename, originalpath, desc
 
 def saveFeatures(dataframe, features, module_parameters, inputs):
 
-    parent_datasets = []
-    for input_item in inputs:
-        input_item_filepath = str(input_item)
-        input_item_filename, file_extension = os.path.splitext(os.path.basename(os.path.abspath(input_item_filepath)))
-        parent_datasets.append(input_item_filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
+    if 'module_testing' not in features:  # Do not proceed if we are just testing a module
+        parent_datasets = []
+        for input_item in inputs:
+            input_item_filepath = str(input_item)
+            input_item_filename, file_extension = os.path.splitext(os.path.basename(os.path.abspath(input_item_filepath)))
+            parent_datasets.append(input_item_filename)  # Just append the names of the dataset used not the full path (Fetched from metadata)
 
-    userdatadir = str(features['userdatadir'])
-    description = str(features['description'])
-    details = str(features['details'])
-    featureset_name = str(features['featureset_name'])
-    modulename = str(features['modulename'])
+        userdatadir = str(features['userdatadir'])
+        description = str(features['description'])
+        details = str(features['details'])
+        featureset_name = str(features['featureset_name'])
+        modulename = str(features['modulename'])
 
-    configstr = str(features['configstr'])
+        configstr = str(features['configstr'])
 
-    filepath = userdatadir + featureset_name + ".parquet"  # This assumes you already have a trailing forward slash in the userdatadir parameter
-    created = datetime.now()
-    user = getpass.getuser()
+        filepath = userdatadir + featureset_name + ".parquet"  # This assumes you already have a trailing forward slash in the userdatadir parameter
+        created = datetime.now()
+        user = getpass.getuser()
 
-    schema = str(dataframe.dtypes)
-    params = defaultdict(str)
-    params['name'] = featureset_name
-    params['identifier'] = ''
-    params['fileformat'] = 'Parquet'
-    params['created'] = created
-    params['user'] = user
+        schema = str(dataframe.dtypes)
+        params = defaultdict(str)
+        params['name'] = featureset_name
+        params['identifier'] = ''
+        params['fileformat'] = 'Parquet'
+        params['created'] = created
+        params['user'] = user
 
-    params['description'] = description
-    params['details'] = details
-    params['modulename'] = modulename
-    params['module_parameters'] = json.dumps(module_parameters)
-    params['parents'] = json.dumps(parent_datasets)
+        params['description'] = description
+        params['details'] = details
+        params['modulename'] = modulename
+        params['module_parameters'] = json.dumps(module_parameters)
+        params['parents'] = json.dumps(parent_datasets)
 
-    params['filepath'] = filepath
-    params['schema'] = schema
+        params['filepath'] = filepath
+        params['schema'] = schema
 
-    try:
-        dataframe.write.parquet(filepath)
-    except Exception as e:
-        raise RuntimeError(e)
+        try:
+            dataframe.write.parquet(filepath)
+        except Exception as e:
+            raise RuntimeError(e)
 
-    sessionconfig = config_session(configstr)
-    create_featureset(sessionconfig, params)
-    create_relation(sessionconfig, featureset_name, parent_datasets)
+        sessionconfig = config_session(configstr)
+        create_featureset(sessionconfig, params)
+        create_relation(sessionconfig, featureset_name, parent_datasets)
 
 
 def config_session(configstr):
@@ -162,7 +163,10 @@ def saveObjsBackend(objs, backend, config):
         for obj in objs:
             try:
                 # obj[0] is hdfs path and obj[1] is local filesystem path
-                subprocess.check_call(['hdfs', 'dfs', '-copyFromLocal', '-f', obj[1], obj[0]])
+                if '.py' in obj[1]:  # If you are uploading a module do not allow it to be overwritten
+                    subprocess.check_call(['hdfs', 'dfs', '-copyFromLocal', obj[1], obj[0]])
+                else:  # If it is the metadata then it has to be overwritten everytime
+                    subprocess.check_call(['hdfs', 'dfs', '-copyFromLocal', '-f', obj[1], obj[0]])
             except Exception as e:
                 shutil.copyfile(config['BACKUP_METADATA_LOCAL_PATH'], config['METADATA_LOCAL_PATH'])
                 raise RuntimeError(e)

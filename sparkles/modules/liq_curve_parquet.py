@@ -110,13 +110,6 @@ def main():
     inputs = json.loads(args.inputs)
     features = json.loads(args.features)
 
-    userdatadir = str(features['userdatadir'])
-    description = str(features['description'])
-    details = str(features['details'])
-    featureset_name = str(features['featureset_name'])
-    modulename = str(features['modulename'])
-    configstr = str(features['configstr'])
-
     start_time_str = str(params['start_time'])
     start_time = int(str(calendar.timegm(time.strptime(start_time_str[:-4], '%Y-%m-%d_%H:%M:%S'))) + start_time_str[-3:])  # convert to epoch
 
