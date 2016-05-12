@@ -9,7 +9,7 @@ before_install:
 # command to install dependencies
 install:
   - "cat requirements.txt | xargs -n 1 pip install"
-  - "pip install pep8 --use-mirrors"
+  - "pip install pep8"
   - "pip install ."
 before_script:
   - "pep8 --ignore=E501,E402 sparkles"

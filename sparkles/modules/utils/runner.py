@@ -169,6 +169,7 @@ class SparkRunner(object):
                             features['userdatadir'] = 'file://' + self.config['FEATURES_DIR']
 
                     features['configstr'] = self.configstr  # The configstr is passed as a default parameter
+                    features['modulename'] = modulename
                     features = json.dumps(features)
                     call([self.config['PYSPARK_CLIENT_PATH'], out_file, "--master", self.clusterUrl, self.backend, helperpath, shuffle_partitions, params, filepaths, features])
 
