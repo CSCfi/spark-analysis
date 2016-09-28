@@ -22,8 +22,8 @@ class SparkRunner(object):
 
         config = None
         if not configpath:
-            configpath = '/sparkles/etc/config.yml'
-
+            with open(os.path.expanduser('~') + '/' + '.sparkles_configpath') as configpath_file:
+                configpath = configpath_file.read().strip()
         with open(configpath, 'r') as config_file:
             config = yaml.load(config_file)
 
@@ -128,7 +128,7 @@ class SparkRunner(object):
                 filepathsarr = []
 
                 # Download the module from Storage first
-                out_file = self.config['MODULES_DIR'] + analysisMod.filepath
+                out_file = self.config['MODULES_DIR_LOCAL'] + analysisMod.filepath
 
                 objs = []
 
@@ -245,7 +245,7 @@ class SparkRunner(object):
             analysisMod = self.session.query(Analysis).filter_by(name=modulename).first()
 
             if analysisMod:
-                localpath = self.config['MODULES_DIR'] + analysisMod.filepath
+                localpath = self.config['MODULES_DIR_LOCAL'] + analysisMod.filepath
                 if(self.config['BACKEND'] == 'hdfs'):
                     delete_item(self.config, filepath=self.config['MODULES_DIR'] + analysisMod.filepath, localpath=localpath)
                 elif(self.config['BACKEND'] == 'swift'):
