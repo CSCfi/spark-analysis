@@ -16,7 +16,7 @@ import socket
 
 def add_all_dates(config, originalpath):
 
-    sparkles_tmp_dir = config['SPARKLES_TMP_DIR']
+    sparkles_tmp_dir = config['SPARKLES_TMP_DIR_LOCAL']
     hfile = NamedTemporaryFile(delete=False, dir=sparkles_tmp_dir)
     with h5py.File(originalpath) as curr_file:
             filekeys = curr_file.keys()
