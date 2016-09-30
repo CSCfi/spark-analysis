@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import sys
 from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerType, LongType
 import os
-from os.path import dirname
+from os.path import dirname, basename
 from tempfile import NamedTemporaryFile
 from utils.helper import saveDataset   # If you added a file in sc in above step then import it for usage
 import json
@@ -16,8 +16,9 @@ import socket
 
 def add_all_dates(config, originalpath):
 
-    sparkles_tmp_dir = config['SPARKLES_TMP_DIR_LOCAL']
-    hfile = NamedTemporaryFile(delete=False, dir=sparkles_tmp_dir)
+    sparkles_tmp_dir_local = config['SPARKLES_TMP_DIR_LOCAL']
+    sparkles_tmp_dir = config['SPARKLES_TMP_DIR']
+    hfile = NamedTemporaryFile(delete=False, dir=sparkles_tmp_dir_local)
     with h5py.File(originalpath) as curr_file:
             filekeys = curr_file.keys()
             for k in filekeys:
@@ -101,7 +102,7 @@ def numpy_to_native(x):
 def main():
     conf = SparkConf()
     conf.setAppName("Data Import")
-    conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
+    # conf.set("spark.jars", "file:/shared_data/spark_jars/hadoop-openstack-3.0.0-SNAPSHOT.jar")
     sc = SparkContext(conf=conf)
 
     parser = argparse.ArgumentParser()
@@ -143,8 +144,8 @@ def main():
     for originalpath in originalpaths:
         hfile = add_all_dates(config, originalpath)
 
-        # raw_file = sc.textFile('file://' + hfile.name, partitions)
-        raw_file = sc.textFile('hdfs://' + socket.gethostname() + ':' + str(config['HADOOP_RPC_PORT']) + hfile.name, partitions)
+        hfile_name = basename(hfile.name)  # hfile.name always returns the full path of the temp file
+        raw_file = sc.textFile('hdfs://' + socket.gethostname() + ':' + str(config['HADOOP_RPC_PORT']) + config['SPARKLES_TMP_DIR'] + hfile_name, partitions)
 
         rdd1 = raw_file.flatMap(lambda x: import_hdf5(x, originalpath, "ORDERS"))
         rdd1 = rdd1.map(numpy_to_native)
